@@ -3,18 +3,35 @@
 Privacy-first job application assistant. Your resume stays on your device.
 No AI at runtime, no subscription, no account.
 
-## Why this lives here, for now
+## It is live
+
+**https://jobpilot-ay8.pages.dev** — deployed 2026-08-26, Cloudflare Pages
+project `jobpilot`. Static, three files, nothing server-side. Your resume text
+never leaves the browser; there is no backend to send it to.
+
+Redeploy after any change:
+
+```bash
+node jobpilot/scripts/build-engine.js
+npx wrangler pages deploy jobpilot/app --project-name jobpilot --branch main
+```
+
+## Why the source still lives in Bootstrap
 
 This directory is a **self-contained project destined for its own
 repository**. It shares no code with the rest of Bootstrap, has its own
 `package.json`, and its own tests.
 
-It is here rather than in its own repo only because the GitHub App running
-this session cannot create repositories (`403 Resource not accessible by
-integration`). Keeping it here means the work is committed and pushed rather
-than living in a container that gets reclaimed.
+It is here because a GitHub App cannot create repositories on a user account —
+there is no permission that grants it, so `POST /user/repos` returns
+`403 Resource not accessible by integration` no matter how the app is
+configured. Only a human, or a personal access token, can create the repo.
+Keeping the code here means it is committed and pushed rather than living in a
+container that gets reclaimed.
 
-**To extract it into its own repository**, once you have created an empty one:
+**To extract it**, create an empty repo first:
+<https://github.com/new?name=jobpilot&visibility=public> — no README, no
+.gitignore, no licence, so the first push is not a conflict. Then:
 
 ```bash
 # from the Bootstrap repo root
