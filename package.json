@@ -1,0 +1,14 @@
+{
+  "name": "jobpilot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Privacy-first job application assistant. Deterministic matching, no LLM at runtime.",
+  "license": "MIT",
+  "scripts": {
+    "build:engine": "node scripts/build-engine.js",
+    "test": "node scripts/build-engine.js && jest"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
+  }
+}

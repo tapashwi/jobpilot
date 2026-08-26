@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>JobPilot — is this job worth applying to?</title>
+<meta name="description" content="Paste your resume and a job description. See exactly what matches and what is missing. Nothing is uploaded, no account, no AI." />
+<style>
+  :root {
+    --ink: #0f172a; --soft: #52607a; --line: #e2e5ec; --bg: #f7f8fa;
+    --pass: #047857; --pass-bg: #d6f5e8; --block: #b91c1c; --block-bg: #fdeaea;
+    --accent: #4338ca;
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  header { background:#0b1020; color:#fff; padding:2rem 1.25rem; }
+  .wrap { max-width:1100px; margin:0 auto; }
+  header h1 { margin:0; font-size:clamp(1.6rem,1.2rem+1.6vw,2.4rem); letter-spacing:-.02em; }
+  header p { margin:.5rem 0 0; color:rgba(255,255,255,.75); max-width:60ch; }
+  main { padding:1.5rem 1.25rem 4rem; }
+  .cols { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:1.1rem; }
+  label { display:block; font-weight:650; font-size:.9rem; margin-bottom:.35rem; }
+  textarea { width:100%; min-height:220px; padding:.7rem; font:inherit; font-size:.92rem;
+    border:1px solid var(--line); border-radius:8px; resize:vertical; }
+  .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.75rem; margin-top:.75rem; }
+  input[type=number], input[type=text] { width:100%; height:42px; padding:0 .6rem; font:inherit;
+    border:1px solid var(--line); border-radius:8px; }
+  .check { display:flex; align-items:center; gap:.5rem; font-size:.9rem; margin-top:.6rem; }
+  button { min-height:46px; padding:.6rem 1.2rem; font:inherit; font-weight:650; cursor:pointer;
+    background:var(--accent); color:#fff; border:0; border-radius:9px; }
+  button.ghost { background:#fff; color:var(--ink); border:1px solid var(--line); }
+  .actions { display:flex; gap:.6rem; flex-wrap:wrap; margin:1.25rem 0; }
+  .verdict { padding:1.1rem; border-radius:12px; margin-bottom:1rem; }
+  .verdict.pass { background:var(--pass-bg); border:1px solid var(--pass); }
+  .verdict.block { background:var(--block-bg); border:1px solid var(--block); }
+  .verdict h2 { margin:0 0 .3rem; font-size:1.25rem; }
+  .verdict p { margin:0; }
+  .blockers { list-style:none; padding:0; margin:.75rem 0 0; }
+  .blockers li { padding:.6rem .75rem; background:#fff; border-radius:8px; margin-bottom:.4rem; }
+  .blockers strong { display:block; }
+  .blockers span { color:var(--soft); font-size:.9rem; }
+  .chips { display:flex; flex-wrap:wrap; gap:.35rem; margin:.4rem 0 1rem; }
+  .chip { font-size:.85rem; padding:.25rem .6rem; border-radius:999px; background:#eef0f4; }
+  .chip.have { background:var(--pass-bg); color:var(--pass); }
+  .chip.miss { background:var(--block-bg); color:var(--block); }
+  h3 { margin:1.2rem 0 .2rem; font-size:.95rem; }
+  .note { font-size:.86rem; color:var(--soft); border-left:3px solid var(--line); padding-left:.75rem; }
+  @media (max-width:860px) { .cols { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>Is this job worth applying to?</h1>
+  <p>Paste your resume and the job ad. You get the honest answer: what you match, what you are
+     missing, and which requirement would actually stop you. Your resume stays on this device —
+     nothing is uploaded, there is no account, and no AI is involved.</p>
+</div></header>
+
+<main class="wrap">
+  <div class="cols">
+    <div class="card">
+      <label for="resume">Your resume or profile</label>
+      <textarea id="resume" placeholder="Paste your resume text here…"></textarea>
+      <div class="row">
+        <div><label for="years">Years of experience</label><input type="number" id="years" min="0" step="0.5" placeholder="3" /></div>
+        <div><label for="minsal">Minimum salary</label><input type="number" id="minsal" min="0" step="1000" placeholder="95000" /></div>
+      </div>
+      <label class="check"><input type="checkbox" id="remote" /> I require remote or hybrid</label>
+      <label class="check"><input type="checkbox" id="sponsor" /> I need visa sponsorship</label>
+    </div>
+
+    <div class="card">
+      <label for="job">The job description</label>
+      <textarea id="job" placeholder="Paste the job ad here — from SEEK, Workday, anywhere…"></textarea>
+      <div class="row">
+        <div><label for="jyears">Years required</label><input type="number" id="jyears" min="0" step="0.5" placeholder="2" /></div>
+        <div><label for="jmin">Pay from</label><input type="number" id="jmin" min="0" step="1000" placeholder="95000" /></div>
+        <div><label for="jmax">Pay to</label><input type="number" id="jmax" min="0" step="1000" placeholder="110000" /></div>
+      </div>
+      <div class="row">
+        <div><label for="jreq">Required skills (comma separated, optional)</label><input type="text" id="jreq" placeholder="left blank = read from the ad" /></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="go">Check this job</button>
+    <button class="ghost" id="clear">Clear</button>
+  </div>
+
+  <div id="out"></div>
+
+  <p class="note" style="margin-top:2rem">
+    JobPilot never submits anything and never fills a form for you. It reads what you paste,
+    on your device. Skills are matched through an alias dictionary, so “k8s” and “Kubernetes”
+    count as the same thing — but that dictionary is not exhaustive, and a skill it does not
+    know will show as missing. Check the lists before trusting them.
+  </p>
+</main>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
