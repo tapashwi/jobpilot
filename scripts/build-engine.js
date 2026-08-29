@@ -43,7 +43,10 @@ const MODULES = [
   'packages/documents/src/cover-letter.js',
   'packages/documents/src/selection-criteria.js',
   'packages/ats/src/ats-check.js',
-  'packages/tracker/src/pipeline.js'
+  'packages/tracker/src/pipeline.js',
+  'packages/prep/src/interview.js',
+  'packages/prep/src/tailor.js',
+  'packages/prep/src/followup.js'
 ];
 const body = MODULES.map((m) => `  // ---- ${m}\n${strip(read(m))}`).join('\n');
 
@@ -94,7 +97,15 @@ ${body}
     buildQueue: buildQueue,
     transition: transition,
     needsFollowUp: needsFollowUp,
-    STATUSES: STATUSES
+    STATUSES: STATUSES,
+    // prep
+    prepare: prepare,
+    tailor: tailor,
+    draftFollowUp: draft,
+    suggestFollowUp: suggest,
+    FOLLOWUP_TEMPLATES: TEMPLATES,
+    QUESTIONS_TO_ASK: QUESTIONS_TO_ASK,
+    surfaceForm: surfaceForm
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 `;

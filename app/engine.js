@@ -961,6 +961,34 @@ function matchSkills(candidateSkills, jobRequired, jobPreferred) {
 
 
 /**
+ * The word a piece of text actually uses for this skill.
+ *
+ * Canonical names are for matching, not for reading. The dictionary resolves
+ * "Splunk" to the canonical "siem", so anything that shows a canonical name
+ * back to a user writes "Siem" where the advertisement said Splunk — wrong,
+ * and obviously machine-written.
+ *
+ * This lives here rather than in a generator because the same bug appeared
+ * independently in the cover letter and again in the interview prep. A defect
+ * that recurs in a second module is a missing abstraction, not bad luck.
+ *
+ * Longest form first, so "amazon web services" wins over "aws" when a document
+ * contains both.
+ */
+function surfaceForm(canonical, text, fallback) {
+  const c = canonicalise(canonical);
+  if (!text) return fallback === undefined ? c : fallback;
+  const forms = [c].concat(ALIASES[c] || []).sort((a, b) => b.length - a.length);
+  for (const f of forms) {
+    const esc = f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = String(text).match(new RegExp('(?<![a-z0-9+#])' + esc + '(?![a-z0-9+#])', 'i'));
+    if (m) return m[0];
+  }
+  return fallback === undefined ? c : fallback;
+}
+
+
+/**
  * Split a job ad's skills into required and preferred.
  *
  * WHY THIS EXISTS. Reading every skill out of an ad as "required" produces the
@@ -1445,26 +1473,10 @@ function coverLetter(profile, job, opts) {
   }
 
   /**
-   * Recover the word the advertisement actually used.
-   *
-   * The alias dictionary maps "Splunk" to the canonical "siem", and a letter
-   * that says "the advertisement asks for Siem" when the advertisement said
-   * Splunk is both wrong and obviously machine-written. So when the caller
-   * hands over canonical names, go back to the ad text and find whichever
-   * form of this skill is really written there.
+   * Recover the word the advertisement actually used. The mechanism lives in
+   * skills.js, because the interview prep needs exactly the same thing.
    */
-  const fromAd = (canonical) => {
-    if (!j.adText) return null;
-    const forms = [canonical].concat(ALIASES[canonical] || []);
-    // Longest first: prefer "amazon web services" over "aws" when both appear.
-    forms.sort((a, b) => b.length - a.length);
-    for (const f of forms) {
-      const esc = f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const m = j.adText.match(new RegExp('(?<![a-z0-9+#])' + esc + '(?![a-z0-9+#])', 'i'));
-      if (m) return m[0];
-    }
-    return null;
-  };
+  const fromAd = (canonical) => (j.adText ? surfaceForm(canonical, j.adText, null) : null);
 
   const label = (canonical) => display.get(canonical) || fromAd(canonical) || titleCase(canonical);
 
@@ -2417,6 +2429,499 @@ function needsFollowUp(records, days) {
 }
 
 
+  // ---- packages/prep/src/interview.js
+/**
+ * interview.js — work out what you will actually be asked, and whether you
+ * have an answer.
+ *
+ * THE INSIGHT THIS RESTS ON
+ *
+ * An interview is not a random quiz. For a structured or semi-structured
+ * process — which is most of them now — the questions are generated from the
+ * same document you already have: the advertisement. Every required skill is a
+ * question. Every gap between the ad and your resume is a question, and it is
+ * the one they will press on, because it is the obvious risk in your
+ * application and the interviewer can see it as clearly as you can.
+ *
+ * So this does not guess at questions. It derives them from the requirements,
+ * pairs each with the evidence already in your resume, and marks the ones
+ * where you have nothing — those are the ones to prepare, and preparing three
+ * of those beats rehearsing twenty you can already answer.
+ *
+ * No model is involved. The questions come from templates applied to the
+ * requirements, which is exactly how a hiring manager writes them.
+ */
+
+
+
+
+/**
+ * Question shapes for a technical requirement.
+ *
+ * Deliberately the four an interviewer actually reaches for: prove it,
+ * measure it, when it went wrong, and how you decide. The fourth is the one
+ * candidates prepare least and senior interviewers weight most.
+ */
+const TECHNICAL_FRAMES = [
+  { id: 'prove', ask: (s) => `Talk me through something you have built with ${s}.` },
+  { id: 'depth', ask: (s) => `How deep does your ${s} experience go — what have you done beyond the basics?` },
+  { id: 'failure', ask: (s) => `Tell me about a time ${s} went wrong on you. What happened and what did you change?` },
+  { id: 'judgement', ask: (s) => `When would you NOT use ${s}?` }
+];
+
+/** Questions that exist because of a gap, not because of a strength. */
+const GAP_FRAMES = [
+  { id: 'missing', ask: (s) => `We use ${s} heavily and I do not see it on your resume. Where are you with it?` },
+  { id: 'ramp', ask: (s) => `How quickly could you get productive with ${s}?` }
+];
+
+const BEHAVIOURAL_QUESTIONS = {
+  communication: [
+    'Tell me about a time you had to explain something technical to someone without your background.',
+    'Describe a disagreement with a stakeholder and how it ended.'
+  ],
+  teamwork: [
+    'Tell me about a time the outcome depended on someone else delivering, and they were struggling.',
+    'What is the hardest team you have worked in, and why?'
+  ],
+  'problem-solving': [
+    'Describe the hardest bug or problem you have solved. How did you narrow it down?',
+    'Tell me about a time the obvious solution was the wrong one.'
+  ],
+  initiative: [
+    'What have you started that nobody asked you to start?',
+    'Tell me about a time you saw a problem outside your remit and acted on it.'
+  ],
+  planning: [
+    'Describe a time you had more work than time. How did you decide what not to do?',
+    'Tell me about a deadline you missed.'
+  ],
+  leadership: [
+    'Tell me about someone you have mentored. Where are they now?',
+    'Describe a time you had to give difficult feedback.'
+  ],
+  change: [
+    'Tell me about a time the requirements changed after you had started.',
+    'How do you work when the goal is genuinely unclear?'
+  ],
+  integrity: [
+    'Tell me about a time doing the right thing cost you something.',
+    'Describe a situation where you disagreed with a decision but had to carry it out.'
+  ]
+};
+
+/** Questions worth asking THEM. The ones that get real answers. */
+const QUESTIONS_TO_ASK = [
+  { q: 'What does the first ninety days look like for whoever takes this?',
+    why: 'A vague answer usually means the role is not scoped, which is the most common reason a good hire fails.' },
+  { q: 'Why is this role open?',
+    why: 'Growth and backfill are different jobs. If it is a backfill, ask what the last person found hard.' },
+  { q: 'How does work get prioritised when two teams want the same thing?',
+    why: 'Every organisation has this problem. The interesting part is whether they have an answer or a shrug.' },
+  { q: 'What is the on-call expectation, honestly?',
+    why: 'Asked plainly, this is hard to dodge, and it is the single largest quality-of-life variable.' },
+  { q: 'What would make you regret hiring someone into this role?',
+    why: 'Inverts the usual framing and tends to produce a genuine answer about the team, not a rehearsed one.' }
+];
+
+/**
+ * Build the prep sheet.
+ *
+ * Ordering is the useful part: questions you cannot answer come FIRST,
+ * because prep time is finite and rehearsing the ones you already have is
+ * how people feel prepared and are not.
+ */
+function prepare(profile, job, opts) {
+  const o = opts || {};
+  const p = profile || {};
+  const j = job || {};
+
+  const required = (j.requiredSkills || []).map(canonicalise);
+  const preferred = (j.preferredSkills || []).map(canonicalise);
+  const all = required.concat(preferred.filter((s) => required.indexOf(s) === -1));
+
+  const ev = evidenceFor(p.resumeText, all);
+  const evBySkill = new Map(ev.map((e) => [e.skill, e]));
+
+  const technical = [];
+  for (const skill of all) {
+    const e = evBySkill.get(skill);
+    const isRequired = required.indexOf(skill) !== -1;
+    const frames = e && e.hasEvidence ? TECHNICAL_FRAMES : GAP_FRAMES;
+
+    for (const f of frames) {
+      technical.push({
+        id: `${skill}:${f.id}`,
+        skill,
+        required: isRequired,
+        question: f.ask(label(skill, j)),
+        haveAnswer: !!(e && e.hasEvidence),
+        evidence: e && e.hasEvidence ? e.text : null,
+        // The judgement frame is answerable from opinion, not from the resume,
+        // so a missing line is not a gap there.
+        priority: !e || !e.hasEvidence
+          ? (isRequired ? 1 : 2)
+          : f.id === 'failure' || f.id === 'judgement' ? 3 : 4
+      });
+    }
+  }
+  technical.sort((a, b) => a.priority - b.priority);
+
+  // Behavioural questions come from the ad's own language.
+  const adKinds = behaviouralKind(String(j.adText || '') + ' ' + (j.criteria || []).join(' '));
+  const behavioural = [];
+  for (const k of adKinds) {
+    for (const q of BEHAVIOURAL_QUESTIONS[k.id] || []) {
+      behavioural.push({ kind: k.id, question: q, prompt: k.prompt });
+    }
+  }
+  // Every interview asks at least one of these, whatever the ad says.
+  if (!behavioural.length) {
+    behavioural.push(
+      { kind: 'problem-solving', question: BEHAVIOURAL_QUESTIONS['problem-solving'][0], prompt: null },
+      { kind: 'teamwork', question: BEHAVIOURAL_QUESTIONS.teamwork[0], prompt: null }
+    );
+  }
+
+  const unanswered = technical.filter((t) => !t.haveAnswer);
+
+  return {
+    technical: o.limit ? technical.slice(0, o.limit) : technical,
+    behavioural,
+    questionsToAsk: QUESTIONS_TO_ASK,
+    unanswered,
+    summary: {
+      total: technical.length + behavioural.length,
+      withoutAnAnswer: unanswered.length,
+      // The honest headline. "You have 24 questions" is noise; "three of them
+      // you cannot currently answer" is a plan for the evening.
+      advice: unanswered.length
+        ? `${unanswered.length} question${unanswered.length === 1 ? '' : 's'} you have no evidence for. ` +
+          'Prepare those first — they are where the interview will actually go.'
+        : 'Every requirement in the ad is backed by something in your resume. Rehearse the ' +
+          'failure and judgement questions; those are the ones people under-prepare.'
+    }
+  };
+}
+
+/** Prefer the advertisement's own word over the internal canonical name. */
+function label(canonical, job) {
+  return surfaceForm(canonical, job && job.adText, canonical);
+}
+
+
+  // ---- packages/prep/src/tailor.js
+/**
+ * tailor.js — concrete edits to make one resume fit one advertisement.
+ *
+ * WHERE THE LINE IS
+ *
+ * Tailoring a resume is legitimate and expected: you emphasise the relevant
+ * work and use the words the reader is searching for. Inventing experience is
+ * not, and the boundary between them is exactly the boundary this module
+ * enforces — it will only ever suggest surfacing something you already wrote,
+ * or rewording something you already wrote. It will never suggest adding a
+ * skill that is not in your resume.
+ *
+ * Where the advertisement asks for something you genuinely do not have, the
+ * suggestion is "you do not have this", not "add this". That is the difference
+ * between a tool that gets you an interview and one that gets you caught out
+ * in it.
+ */
+
+
+
+/** An edit the user can accept or ignore, with the reason attached. */
+function edit(kind, severity, what, why, how) {
+  return { kind, severity, what, why, how };
+}
+
+/**
+ * Words the advertisement leans on that the resume never uses — but only where
+ * the resume ALREADY demonstrates the thing under another name. That is a
+ * rewording suggestion, not a fabrication.
+ */
+function vocabularyEdits(resumeText, job) {
+  const out = [];
+  const ad = String(job.adText || '');
+  const inResume = new Set(extractSkills(resumeText));
+
+  for (const skill of (job.requiredSkills || []).concat(job.preferredSkills || [])) {
+    const c = canonicalise(skill);
+    if (!inResume.has(c)) continue;
+
+    const theirWord = surfaceForm(c, ad, null);
+    const yourWord = surfaceForm(c, resumeText, null);
+    if (!theirWord || !yourWord) continue;
+    if (normalise(theirWord) === normalise(yourWord)) continue;
+
+    out.push(edit(
+      'vocabulary', 'high',
+      `They write "${theirWord}", your resume writes "${yourWord}"`,
+      'A keyword search matches the literal string. A recruiter filtering on their own wording ' +
+        'will not find yours, even though you have the skill.',
+      `Use both once: "${yourWord} (${theirWord})". One mention of each form covers both searches ` +
+        'and costs you nine characters.'
+    ));
+  }
+  return out;
+}
+
+/**
+ * Achievements that mention a required skill but are buried at the bottom.
+ * Moving one line is the cheapest edit there is.
+ */
+function orderEdits(resumeText, job) {
+  const all = statements(resumeText);
+  if (all.length < 6) return [];
+  const required = (job.requiredSkills || []).map(canonicalise);
+  if (!required.length) return [];
+
+  const out = [];
+  const lastThird = all.slice(Math.floor(all.length * 0.66));
+  const firstThird = all.slice(0, Math.floor(all.length * 0.34));
+  const topSkills = new Set(firstThird.flatMap((s) => extractSkills(s.text)));
+
+  for (const st of lastThird) {
+    const hits = extractSkills(st.text).filter((s) => required.indexOf(s) !== -1 && !topSkills.has(s));
+    if (!hits.length) continue;
+    out.push(edit(
+      'order', 'high',
+      `A required skill only appears near the end: ${hits.join(', ')}`,
+      'A recruiter reads the top third. An achievement below it is filed as "not their focus", ' +
+        'whatever it says.',
+      `Move this line up, or echo it in your summary: "${st.text.slice(0, 110)}${st.text.length > 110 ? '…' : ''}"`
+    ));
+  }
+  return out.slice(0, 3);
+}
+
+/** Achievements with no number, where the job is one that will ask for numbers. */
+function evidenceEdits(resumeText, job) {
+  const required = (job.requiredSkills || []).map(canonicalise);
+  const out = [];
+  for (const st of statements(resumeText)) {
+    if (isQuantified(st.text)) continue;
+    const hits = extractSkills(st.text).filter((s) => required.indexOf(s) !== -1);
+    if (!hits.length) continue;
+    out.push(edit(
+      'evidence', 'medium',
+      `No measure on a line about ${hits.join(', ')}`,
+      'This is the work they are hiring for, and the line does not say how much of it you did ' +
+        'or what changed.',
+      `Add scale or outcome to: "${st.text.slice(0, 110)}${st.text.length > 110 ? '…' : ''}" — ` +
+        'how many, how much, how much faster. An approximation is fine; an invention is not.'
+    ));
+  }
+  return out.slice(0, 3);
+}
+
+/** Requirements you genuinely do not have. Stated, never "fixed". */
+function honestGaps(resumeText, job) {
+  const inResume = new Set(extractSkills(resumeText));
+  const missing = (job.requiredSkills || [])
+    .map(canonicalise)
+    .filter((s) => !inResume.has(s));
+
+  return missing.map((s) => edit(
+    'gap', 'critical',
+    `The ad requires ${surfaceForm(s, job.adText, s)} and your resume does not mention it`,
+    'This is a real gap, not a wording problem.',
+    'If you have done it, add a real achievement. If you have not, do NOT add the keyword — ' +
+      'you would pass the filter and fail the first technical question, having spent the ' +
+      'interview slot to do it.'
+  ));
+}
+
+/**
+ * The summary line at the top, which is the highest-leverage 30 words on the
+ * page and is usually written once and never touched again.
+ */
+function summaryEdit(resumeText, job) {
+  const first = statements(resumeText)[0];
+  const required = (job.requiredSkills || []).map(canonicalise).slice(0, 3);
+  if (!required.length) return [];
+  const inSummary = first ? new Set(extractSkills(first.text)) : new Set();
+  const absent = required.filter((s) => !inSummary.has(s));
+  if (!absent.length) return [];
+
+  return [edit(
+    'summary', 'high',
+    `Your opening lines do not mention ${absent.map((s) => surfaceForm(s, job.adText, s)).join(', ')}`,
+    'The summary is read first and skimmed hardest, and it is the part most people write once ' +
+      'and never revisit per application.',
+    'Rewrite the summary for this job, naming the two or three things the ad leads with — ' +
+      'provided you can back them up further down.'
+  )];
+}
+
+function tailor(profile, job) {
+  const resumeText = (profile || {}).resumeText || '';
+  const j = job || {};
+  if (!resumeText.trim()) {
+    return { edits: [], counts: { critical: 0, high: 0, medium: 0 }, note: 'No resume to tailor.' };
+  }
+
+  const edits = [
+    ...honestGaps(resumeText, j),
+    ...vocabularyEdits(resumeText, j),
+    ...summaryEdit(resumeText, j),
+    ...orderEdits(resumeText, j),
+    ...evidenceEdits(resumeText, j)
+  ];
+
+  const rank = { critical: 0, high: 1, medium: 2 };
+  edits.sort((a, b) => rank[a.severity] - rank[b.severity]);
+
+  return {
+    edits,
+    counts: {
+      critical: edits.filter((e) => e.severity === 'critical').length,
+      high: edits.filter((e) => e.severity === 'high').length,
+      medium: edits.filter((e) => e.severity === 'medium').length
+    },
+    note: edits.length
+      ? 'Every suggestion above either surfaces or rewords something already in your resume. ' +
+        'None of them adds experience you do not have — that is the line between tailoring and ' +
+        'lying, and it is where this tool stops.'
+      : 'Nothing to change for this one. Your resume already uses their vocabulary and leads ' +
+        'with what they asked for.'
+  };
+}
+
+
+  // ---- packages/prep/src/followup.js
+/**
+ * followup.js — the messages people know they should send and do not.
+ *
+ * Following up is the cheapest advantage in a job search and almost nobody
+ * does it, because writing the message from a blank page feels like begging.
+ * It is not: a recruiter managing forty applications genuinely loses track,
+ * and a short, specific note moves you back to the top of a list.
+ *
+ * These are short on purpose. A long follow-up reads as anxiety; three
+ * sentences reads as professional. Everything specific is a marked blank,
+ * because the specific part is what makes it work and it is the part only the
+ * applicant knows.
+ */
+
+
+const TEMPLATES = {
+  'after-applying': {
+    label: 'After applying, no response',
+    wait: 10,
+    subject: (j) => `Application for ${j.title || GAP('role')}`,
+    body: (p, j) => [
+      `Hello${j.contact ? ' ' + j.contact : ''},`,
+      '',
+      `I applied for the ${j.title || GAP('role')} role${j.company ? ' at ' + j.company : ''} on ` +
+        `${GAP('date')} and wanted to make sure it reached you.`,
+      '',
+      `${GAP('one sentence on the single most relevant thing you have done — the one that matches ' +
+        'their top requirement. Not a summary of your resume; they have that')}`,
+      '',
+      'Happy to answer anything useful in the meantime.',
+      '',
+      'Regards,',
+      p.name || GAP('your name')
+    ].join('\n'),
+    note: 'Send about ten working days after applying. Sooner reads as impatient; much later and ' +
+      'the shortlist is closed.'
+  },
+
+  'after-interview': {
+    label: 'After an interview',
+    wait: 1,
+    subject: (j) => `Thank you — ${j.title || GAP('role')}`,
+    body: (p, j) => [
+      `Hello${j.contact ? ' ' + j.contact : ''},`,
+      '',
+      `Thank you for your time ${GAP('yesterday / on Tuesday')}.`,
+      '',
+      `${GAP('name ONE specific thing from the conversation — a problem they described, a ' +
+        'decision they are weighing. This is the whole point of the message: it proves you were ' +
+        'listening and it is what they will remember')}`,
+      '',
+      `${GAP('optional, and powerful: if a question caught you out, answer it properly here in ' +
+        'two sentences. Interviewers rate this highly and almost nobody does it')}`,
+      '',
+      'Regards,',
+      p.name || GAP('your name')
+    ].join('\n'),
+    note: 'Send within 24 hours, while they are still writing up their notes. This is the single ' +
+      'highest-return message in the whole process.'
+  },
+
+  'chasing-decision': {
+    label: 'Chasing a decision after an interview',
+    wait: 7,
+    subject: (j) => `Following up — ${j.title || GAP('role')}`,
+    body: (p, j) => [
+      `Hello${j.contact ? ' ' + j.contact : ''},`,
+      '',
+      `Following up on the ${j.title || GAP('role')} role — is there an update, or anything else ` +
+        'you need from me?',
+      '',
+      `${GAP('only if true: mention a competing timeline. It is legitimate pressure and it works. ' +
+        'Do not invent one — it is checkable and the bluff ends the process')}`,
+      '',
+      'Regards,',
+      p.name || GAP('your name')
+    ].join('\n'),
+    note: 'A week after the date they gave you, not a week after the interview. If they gave no ' +
+      'date, ask for one at the interview — that is what makes this message easy to write.'
+  },
+
+  'after-rejection': {
+    label: 'After a rejection',
+    wait: 0,
+    subject: (j) => `Thank you — ${j.title || GAP('role')}`,
+    body: (p, j) => [
+      `Hello${j.contact ? ' ' + j.contact : ''},`,
+      '',
+      `Thank you for letting me know${j.company ? ' about the ' + (j.title || 'role') + ' at ' + j.company : ''}.`,
+      '',
+      'If you have a moment, I would genuinely value one thing I could have done better — it ' +
+        'helps more than you would think.',
+      '',
+      `${GAP('optional: say you would like to be considered for future roles. Recruiters keep ' +
+        'these notes, and a gracious rejection reply is rare enough to be memorable')}`,
+      '',
+      'Regards,',
+      p.name || GAP('your name')
+    ].join('\n'),
+    note: 'Most people send nothing. A short, ungrudging reply is remembered, and second-choice ' +
+      'candidates get called back more often than anyone admits.'
+  }
+};
+
+function draft(kind, profile, job) {
+  const t = TEMPLATES[kind];
+  if (!t) throw new Error('Unknown follow-up: ' + kind);
+  const p = profile || {};
+  const j = job || {};
+  const body = t.body(p, j);
+  return {
+    kind,
+    label: t.label,
+    subject: t.subject(j),
+    body,
+    note: t.note,
+    waitDays: t.wait,
+    gaps: (body.match(/\[[^\]]+\]/g) || []).length
+  };
+}
+
+/** Which message is due, given where the application is and how long it has sat. */
+function suggest(status, daysSince) {
+  if (status === 'applied' && daysSince >= TEMPLATES['after-applying'].wait) return 'after-applying';
+  if (status === 'interviewing' && daysSince <= 1) return 'after-interview';
+  if (status === 'interviewing' && daysSince >= TEMPLATES['chasing-decision'].wait) return 'chasing-decision';
+  if (status === 'rejected') return 'after-rejection';
+  return null;
+}
+
+
 
   root.JobPilot = {
     // matching
@@ -2451,6 +2956,14 @@ function needsFollowUp(records, days) {
     buildQueue: buildQueue,
     transition: transition,
     needsFollowUp: needsFollowUp,
-    STATUSES: STATUSES
+    STATUSES: STATUSES,
+    // prep
+    prepare: prepare,
+    tailor: tailor,
+    draftFollowUp: draft,
+    suggestFollowUp: suggest,
+    FOLLOWUP_TEMPLATES: TEMPLATES,
+    QUESTIONS_TO_ASK: QUESTIONS_TO_ASK,
+    surfaceForm: surfaceForm
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

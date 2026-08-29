@@ -162,7 +162,35 @@ function matchSkills(candidateSkills, jobRequired, jobPreferred) {
   };
 }
 
-module.exports = { normalise, canonicalise, isKnown, extractSkills, matchSkills, LOOKUP, ALIASES, AMBIGUOUS, inListContext };
+
+/**
+ * The word a piece of text actually uses for this skill.
+ *
+ * Canonical names are for matching, not for reading. The dictionary resolves
+ * "Splunk" to the canonical "siem", so anything that shows a canonical name
+ * back to a user writes "Siem" where the advertisement said Splunk — wrong,
+ * and obviously machine-written.
+ *
+ * This lives here rather than in a generator because the same bug appeared
+ * independently in the cover letter and again in the interview prep. A defect
+ * that recurs in a second module is a missing abstraction, not bad luck.
+ *
+ * Longest form first, so "amazon web services" wins over "aws" when a document
+ * contains both.
+ */
+function surfaceForm(canonical, text, fallback) {
+  const c = canonicalise(canonical);
+  if (!text) return fallback === undefined ? c : fallback;
+  const forms = [c].concat(ALIASES[c] || []).sort((a, b) => b.length - a.length);
+  for (const f of forms) {
+    const esc = f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const m = String(text).match(new RegExp('(?<![a-z0-9+#])' + esc + '(?![a-z0-9+#])', 'i'));
+    if (m) return m[0];
+  }
+  return fallback === undefined ? c : fallback;
+}
+
+module.exports = { normalise, canonicalise, isKnown, extractSkills, matchSkills, surfaceForm, LOOKUP, ALIASES, AMBIGUOUS, inListContext };
 
 /**
  * Split a job ad's skills into required and preferred.

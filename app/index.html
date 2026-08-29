@@ -31,7 +31,11 @@
   header p { margin:.5rem 0 1.1rem; color:rgba(255,255,255,.75); max-width:64ch; }
 
   /* Tabs */
-  .tabs { display:flex; gap:.15rem; overflow-x:auto; }
+  /* Nine tabs overflow a laptop viewport. Horizontal scroll hid the first
+     one entirely once a later tab was selected — a section you cannot see is
+     a section you do not know exists. Wrapping costs a row of height and
+     keeps every tab reachable without a gesture. */
+  .tabs { display:flex; gap:.15rem; flex-wrap:wrap; }
   .tabs button { background:transparent; color:rgba(255,255,255,.7); border:0;
     border-bottom:3px solid transparent; border-radius:0; padding:.75rem 1rem;
     min-height:48px; font-weight:600; font-size:.94rem; white-space:nowrap; cursor:pointer; }
@@ -118,6 +122,119 @@
   .stat b { display:block; font-size:1.5rem; line-height:1.2; }
   .stat span { font-size:.8rem; color:var(--soft); }
 
+
+  /* ===========================================================
+     Morphism layer — glass, clay and soft-UI depth.
+
+     Which one where, and why not all of them everywhere:
+       GLASS on things that float over the header gradient.
+       CLAY  on things you press: tabs, buttons, cards.
+       SOFT  on inputs, where depth must not cost legibility.
+
+     Pure neumorphism is deliberately absent from anything you
+     have to read or hit accurately: its metaphor puts text on
+     the same surface as its own shadow, which is a contrast
+     problem by construction, and it has no dark mode because
+     there is no light source to extrude from. This app has a
+     dark mode and a lot of small text, so it gets the
+     accessible evolution instead of the original.
+     =========================================================== */
+  :root {
+    --glass-bg: rgba(255,255,255,.62);
+    --glass-brd: rgba(255,255,255,.8);
+    --glass-blur: blur(16px) saturate(1.6);
+    --clay:
+      0 12px 24px -8px rgba(15,23,42,.16),
+      0 4px 8px -4px rgba(15,23,42,.09),
+      inset 0 2px 3px rgba(255,255,255,.95),
+      inset 0 -3px 6px rgba(15,23,42,.05);
+    --clay-press:
+      0 3px 9px -6px rgba(15,23,42,.2),
+      inset 0 2px 5px rgba(15,23,42,.1);
+    --soft-inset: inset 0 1px 2px rgba(15,23,42,.08);
+    --ease: cubic-bezier(.22,1,.36,1);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --glass-bg: rgba(19,26,46,.6);
+      --glass-brd: rgba(255,255,255,.1);
+      /* The inner highlight has to weaken in the dark, or every card
+         gets a white rim — the giveaway that a light-mode shadow
+         stack was reused without being re-thought. */
+      --clay:
+        0 12px 24px -8px rgba(0,0,0,.55),
+        0 4px 8px -4px rgba(0,0,0,.35),
+        inset 0 1px 1px rgba(255,255,255,.09),
+        inset 0 -3px 6px rgba(0,0,0,.3);
+      --clay-press: 0 3px 8px -5px rgba(0,0,0,.6), inset 0 2px 6px rgba(0,0,0,.45);
+      --soft-inset: inset 0 1px 2px rgba(0,0,0,.35);
+    }
+  }
+
+  /* The header gradient is what gives the glass something to blur. */
+  header {
+    background:
+      radial-gradient(1000px 400px at 10% -10%, #2b3a7a 0%, transparent 60%),
+      radial-gradient(800px 380px at 90% 0%, #4338ca 0%, transparent 55%),
+      #0b1020;
+  }
+
+  .tabs button {
+    border-radius: 12px 12px 0 0;
+    transition: background 200ms var(--ease), color 200ms var(--ease);
+  }
+  .tabs button[aria-selected="true"] {
+    background: var(--glass-bg);
+    color: #fff;
+  }
+  @supports (backdrop-filter: blur(4px)) or (-webkit-backdrop-filter: blur(4px)) {
+    .tabs button[aria-selected="true"] {
+      -webkit-backdrop-filter: var(--glass-blur);
+      backdrop-filter: var(--glass-blur);
+      background: rgba(255,255,255,.16);
+    }
+  }
+
+  .card {
+    border-radius: 20px;
+    box-shadow: var(--clay);
+    border: 1px solid var(--glass-brd);
+  }
+
+  button {
+    border-radius: 14px;
+    box-shadow: var(--clay);
+    transition: transform 180ms var(--ease), box-shadow 180ms var(--ease);
+  }
+  button:hover { transform: translateY(-1px); }
+  /* The squish. The whole reason clay is worth having on a pressable
+     thing is that the surface has to give. */
+  button:active { transform: scale(.97); box-shadow: var(--clay-press); }
+
+  textarea, input[type=number], input[type=text], select {
+    box-shadow: var(--soft-inset);
+    transition: box-shadow 180ms var(--ease), border-color 180ms var(--ease);
+  }
+
+  /* Focus stays a real, high-contrast ring. Soft UI's failure mode is a
+     focus state you cannot see, and a keyboard user then cannot use the
+     page at all — no amount of material is worth that. */
+  :focus-visible {
+    outline: 3px solid #4338ca;
+    outline-offset: 2px;
+  }
+  @media (prefers-color-scheme: dark) { :focus-visible { outline-color: #a5b4fc; } }
+
+  .verdict, .finding, .qrow, .stat, .doc { border-radius: 16px; box-shadow: var(--clay); }
+  .chip { box-shadow: var(--soft-inset); }
+
+  @media (prefers-reduced-motion: reduce) {
+    /* The material stays; only the movement goes. Someone who asked for
+       less motion did not ask for a flatter page. */
+    button, .tabs button, textarea, input, select { transition: none; }
+    button:hover, button:active { transform: none; }
+  }
+
   @media (max-width:860px) { .cols { grid-template-columns:1fr; } }
 </style>
 </head>
@@ -135,6 +252,9 @@
     <button role="tab" id="t-letter"   aria-controls="p-letter"   aria-selected="false">Cover letter</button>
     <button role="tab" id="t-criteria" aria-controls="p-criteria" aria-selected="false">Selection criteria</button>
     <button role="tab" id="t-queue"    aria-controls="p-queue"    aria-selected="false">Apply in bulk</button>
+    <button role="tab" id="t-tailor"   aria-controls="p-tailor"   aria-selected="false">Tailor resume</button>
+    <button role="tab" id="t-interview" aria-controls="p-interview" aria-selected="false">Interview prep</button>
+    <button role="tab" id="t-followup" aria-controls="p-followup" aria-selected="false">Follow up</button>
   </nav>
 </div></header>
 
@@ -260,6 +380,56 @@
         <button class="ghost" id="exportQueue">Export as JSON</button></div>
     </div>
     <div id="queueOut"></div>
+  </section>
+
+  <section role="tabpanel" id="p-tailor" aria-labelledby="t-tailor" hidden>
+    <div class="card">
+      <p class="note">Concrete edits to make your resume fit one advertisement. Every suggestion
+         either surfaces or rewords something <strong>already in your resume</strong>. Where the ad
+         asks for something you genuinely do not have, you get told that — not told to add the
+         keyword. That is the line between tailoring and lying, and it is where this stops.</p>
+      <label for="tJob" style="margin-top:.8rem">The job advertisement</label>
+      <textarea id="tJob" placeholder="Paste the ad…"></textarea>
+      <div class="actions"><button id="runTailor">Suggest edits</button></div>
+    </div>
+    <div id="tailorOut"></div>
+  </section>
+
+  <section role="tabpanel" id="p-interview" aria-labelledby="t-interview" hidden>
+    <div class="card">
+      <p class="note">An interview is not a random quiz. The questions come from the same
+         advertisement you already have: every requirement is a question, and every gap between the
+         ad and your resume is the question they will press on. The ones you cannot answer are
+         listed first, because that is where the hour goes.</p>
+      <label for="iJob" style="margin-top:.8rem">The job advertisement</label>
+      <textarea id="iJob" placeholder="Paste the ad…"></textarea>
+      <div class="actions"><button id="runInterview">Build my prep sheet</button>
+        <button class="ghost" id="copyPrep">Copy</button></div>
+    </div>
+    <div id="interviewOut"></div>
+  </section>
+
+  <section role="tabpanel" id="p-followup" aria-labelledby="t-followup" hidden>
+    <div class="card">
+      <p class="note">The messages everyone knows they should send and almost nobody does.
+         A recruiter juggling forty applications genuinely loses track, and three specific
+         sentences move you back to the top of a list.</p>
+      <div class="row">
+        <div><label for="fKind">Which message</label>
+          <select id="fKind">
+            <option value="after-applying">After applying, no response</option>
+            <option value="after-interview">After an interview</option>
+            <option value="chasing-decision">Chasing a decision</option>
+            <option value="after-rejection">After a rejection</option>
+          </select></div>
+        <div><label for="fTitle">Role title</label><input type="text" id="fTitle" placeholder="Platform Engineer" /></div>
+        <div><label for="fCompany">Company</label><input type="text" id="fCompany" placeholder="Canva" /></div>
+        <div><label for="fContact">Their name (optional)</label><input type="text" id="fContact" placeholder="Sam" /></div>
+      </div>
+      <div class="actions"><button id="runFollowup">Draft it</button>
+        <button class="ghost" id="copyFollowup">Copy</button></div>
+    </div>
+    <div id="followupOut"></div>
   </section>
 
 </main>

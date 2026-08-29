@@ -22,7 +22,7 @@
  */
 
 const { evidenceFor, strongest, GAP } = require('./evidence');
-const { canonicalise, ALIASES } = require('../../matching/src/skills');
+const { canonicalise, surfaceForm } = require('../../matching/src/skills');
 
 function titleCase(s) {
   return String(s || '').replace(/\b[a-z]/g, (c) => c.toUpperCase());
@@ -82,26 +82,10 @@ function coverLetter(profile, job, opts) {
   }
 
   /**
-   * Recover the word the advertisement actually used.
-   *
-   * The alias dictionary maps "Splunk" to the canonical "siem", and a letter
-   * that says "the advertisement asks for Siem" when the advertisement said
-   * Splunk is both wrong and obviously machine-written. So when the caller
-   * hands over canonical names, go back to the ad text and find whichever
-   * form of this skill is really written there.
+   * Recover the word the advertisement actually used. The mechanism lives in
+   * skills.js, because the interview prep needs exactly the same thing.
    */
-  const fromAd = (canonical) => {
-    if (!j.adText) return null;
-    const forms = [canonical].concat(ALIASES[canonical] || []);
-    // Longest first: prefer "amazon web services" over "aws" when both appear.
-    forms.sort((a, b) => b.length - a.length);
-    for (const f of forms) {
-      const esc = f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const m = j.adText.match(new RegExp('(?<![a-z0-9+#])' + esc + '(?![a-z0-9+#])', 'i'));
-      if (m) return m[0];
-    }
-    return null;
-  };
+  const fromAd = (canonical) => (j.adText ? surfaceForm(canonical, j.adText, null) : null);
 
   const label = (canonical) => display.get(canonical) || fromAd(canonical) || titleCase(canonical);
 

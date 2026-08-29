@@ -383,6 +383,122 @@
     }, null, 2), this);
   });
 
+
+  /* --------------------------------------------------------- tailoring */
+
+  $('#runTailor').addEventListener('click', function () {
+    if (needResume('#tailorOut')) return;
+    var parsed = JP.parseJobSkills($('#tJob').value);
+    var r = JP.tailor(profile(), {
+      adText: $('#tJob').value,
+      requiredSkills: parsed.required,
+      preferredSkills: parsed.preferred
+    });
+
+    if (!r.edits.length) {
+      $('#tailorOut').innerHTML = '<div class="verdict pass"><h2>Nothing to change</h2><p>' +
+        esc(r.note) + '</p></div>';
+      return;
+    }
+
+    var html = '<div class="stats">' +
+      '<div class="stat"><b>' + r.counts.critical + '</b><span>real gaps</span></div>' +
+      '<div class="stat"><b>' + r.counts.high + '</b><span>worth doing</span></div>' +
+      '<div class="stat"><b>' + r.counts.medium + '</b><span>if you have time</span></div></div>';
+
+    html += r.edits.map(function (e) {
+      var sev = e.severity === 'critical' ? 'critical' : e.severity === 'high' ? 'warning' : 'info';
+      return '<div class="finding ' + sev + '">' +
+        '<h4><span class="sev ' + sev + '">' + esc(e.kind) + '</span>' + esc(e.what) + '</h4>' +
+        '<p>' + esc(e.why) + '</p>' +
+        '<p class="fix"><strong>Do this:</strong> ' + esc(e.how) + '</p></div>';
+    }).join('');
+
+    html += '<div class="card"><p class="note">' + esc(r.note) + '</p></div>';
+    $('#tailorOut').innerHTML = html;
+  });
+
+  /* ---------------------------------------------------- interview prep */
+
+  var lastPrep = '';
+
+  $('#runInterview').addEventListener('click', function () {
+    if (needResume('#interviewOut')) return;
+    var parsed = JP.parseJobSkills($('#iJob').value);
+    var r = JP.prepare(profile(), {
+      adText: $('#iJob').value,
+      requiredSkills: parsed.required,
+      preferredSkills: parsed.preferred
+    });
+
+    lastPrep = [
+      'QUESTIONS I CANNOT YET ANSWER',
+      r.unanswered.map(function (t) { return '- ' + t.question; }).join('\n') || '(none)',
+      '', 'TECHNICAL',
+      r.technical.map(function (t) {
+        return '- ' + t.question + (t.evidence ? '\n  evidence: ' + t.evidence : '');
+      }).join('\n'),
+      '', 'BEHAVIOURAL',
+      r.behavioural.map(function (b) { return '- ' + b.question; }).join('\n'),
+      '', 'ASK THEM',
+      r.questionsToAsk.map(function (q) { return '- ' + q.q; }).join('\n')
+    ].join('\n');
+
+    var cls = r.summary.withoutAnAnswer ? 'warn' : 'pass';
+    var html = '<div class="verdict ' + cls + '"><h2>' + r.summary.total + ' likely questions, ' +
+      r.summary.withoutAnAnswer + ' you cannot answer yet</h2><p>' + esc(r.summary.advice) + '</p></div>';
+
+    if (r.unanswered.length) {
+      html += '<div class="card"><h3 style="margin-top:0">Prepare these first</h3><ul class="blockers">' +
+        r.unanswered.map(function (t) {
+          return '<li><strong>' + esc(t.question) + '</strong><span>' +
+            (t.required ? 'This is a stated requirement.' : 'Listed as preferred.') + '</span></li>';
+        }).join('') + '</ul></div>';
+    }
+
+    html += '<div class="card"><h3 style="margin-top:0">Technical</h3><ul class="blockers">' +
+      r.technical.map(function (t) {
+        return '<li><strong>' + esc(t.question) + '</strong><span>' +
+          (t.evidence ? 'Your answer is here: “' + esc(t.evidence) + '”' : 'Nothing in your resume answers this.') +
+          '</span></li>';
+      }).join('') + '</ul></div>';
+
+    html += '<div class="card"><h3 style="margin-top:0">Behavioural</h3><ul class="blockers">' +
+      r.behavioural.map(function (b) {
+        return '<li><strong>' + esc(b.question) + '</strong>' +
+          (b.prompt ? '<span>Think of ' + esc(b.prompt) + '.</span>' : '') + '</li>';
+      }).join('') + '</ul></div>';
+
+    html += '<div class="card"><h3 style="margin-top:0">Ask them</h3><ul class="blockers">' +
+      r.questionsToAsk.map(function (q) {
+        return '<li><strong>' + esc(q.q) + '</strong><span>' + esc(q.why) + '</span></li>';
+      }).join('') + '</ul></div>';
+
+    $('#interviewOut').innerHTML = html;
+  });
+
+  $('#copyPrep').addEventListener('click', function () { copyText(lastPrep, this); });
+
+  /* ----------------------------------------------------------- follow up */
+
+  var lastFollowup = '';
+
+  $('#runFollowup').addEventListener('click', function () {
+    var d = JP.draftFollowUp($('#fKind').value, profile(), {
+      title: $('#fTitle').value.trim() || null,
+      company: $('#fCompany').value.trim() || null,
+      contact: $('#fContact').value.trim() || null
+    });
+    lastFollowup = 'Subject: ' + d.subject + '\n\n' + d.body;
+    $('#followupOut').innerHTML =
+      '<div class="card"><h3 style="margin-top:0">' + esc(d.label) + '</h3>' +
+      '<p class="src"><strong>Subject:</strong> ' + withGaps(d.subject) + '</p>' +
+      '<div class="doc">' + withGaps(d.body) + '</div>' +
+      '<p class="note" style="margin-top:.8rem"><strong>When:</strong> ' + esc(d.note) + '</p></div>';
+  });
+
+  $('#copyFollowup').addEventListener('click', function () { copyText(lastFollowup, this); });
+
   /* ------------------------------------------------------------------- boot */
 
   $('#saveProfile').addEventListener('click', saveProfile);

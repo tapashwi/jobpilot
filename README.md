@@ -61,6 +61,26 @@ all** — the point is to stop you spending an evening on applications that
 cannot succeed. Faults that affect every job are surfaced once, because fixing
 your resume improves the whole queue.
 
+**Tailor your resume.** Concrete edits for one advertisement. Every suggestion
+either surfaces or rewords something **already in your resume** — it will tell
+you that they write "Kubernetes" where you wrote "k8s", or that a required
+skill is buried in your last three bullets. Where the ad asks for something you
+genuinely do not have, it says so and explicitly tells you **not** to add the
+keyword. That is the line between tailoring and lying.
+
+**Interview prep.** An interview is not a random quiz: the questions come from
+the same advertisement you already have. Every requirement is a question, and
+every gap between the ad and your resume is the one they will press on. The
+questions you cannot answer are listed first, because that is where the hour
+goes. Answerable ones arrive with the line from your resume that answers them.
+Plus five questions worth asking them, each with why it works.
+
+**Follow up.** The messages everyone knows they should send and nobody does —
+after applying, after an interview, chasing a decision, after a rejection.
+Short on purpose; the specific sentence is a marked blank, because that is the
+part that makes it work and the part only you know. Each one carries the timing,
+since sending at the wrong moment is the usual mistake.
+
 **Track them.** Statuses with full history, and a follow-up list for the ones
 that have gone quiet.
 
