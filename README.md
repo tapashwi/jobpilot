@@ -12,35 +12,20 @@ never leaves the browser; there is no backend to send it to.
 Redeploy after any change:
 
 ```bash
-node jobpilot/scripts/build-engine.js
-npx wrangler pages deploy jobpilot/app --project-name jobpilot --branch main
+node scripts/build-engine.js
+npx wrangler pages deploy app --project-name jobpilot --branch main
 ```
 
-## Why the source still lives in Bootstrap
+## Where this came from
 
-This directory is a **self-contained project destined for its own
-repository**. It shares no code with the rest of Bootstrap, has its own
-`package.json`, and its own tests.
+JobPilot was designed and built inside the [Bootstrap](https://github.com/tapashwi/Bootstrap)
+repository and split out here with `git subtree split`, so the history above is
+the real history — not a squashed import.
 
-It is here because a GitHub App cannot create repositories on a user account —
-there is no permission that grants it, so `POST /user/repos` returns
-`403 Resource not accessible by integration` no matter how the app is
-configured. Only a human, or a personal access token, can create the repo.
-Keeping the code here means it is committed and pushed rather than living in a
-container that gets reclaimed.
-
-**To extract it**, create an empty repo first:
-<https://github.com/new?name=jobpilot&visibility=public> — no README, no
-.gitignore, no licence, so the first push is not a conflict. Then:
-
-```bash
-# from the Bootstrap repo root
-git subtree split --prefix=jobpilot -b jobpilot-only
-git push git@github.com:tapashwi/jobpilot.git jobpilot-only:main
-```
-
-That preserves this directory's full history as the new repo's history. Then
-delete `jobpilot/` from Bootstrap.
+The full design reasoning lives in that repo at
+`docs/projects/jobpilot-plan.md`: why the matcher uses gates rather than a
+weighted score, why PDF parsing and autofill are deliberately absent, and what
+Manifest V3 does to browser-extension autofill.
 
 ## What it does
 
@@ -71,7 +56,7 @@ See `docs/projects/jobpilot-plan.md` in Bootstrap for the full reasoning.
 ## Run
 
 ```bash
-cd jobpilot
+npm install
 npm test          # the matching engine
 ```
 
