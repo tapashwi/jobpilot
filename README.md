@@ -89,6 +89,62 @@ and "Kubernetes" are the same thing. Names that are also ordinary English —
 Go, C, R, SAFe — only count with corroboration, so "we plan to go live" does
 not credit you with the Go programming language.
 
+## The auto-apply extension
+
+`extension/` is a Manifest V3 Chrome extension that fills and submits real
+application forms. Load it unpacked from `chrome://extensions`.
+
+It is built against the market's documented failures rather than its marketing.
+The four things reviewers consistently report about hands-off appliers are that
+they apply to jobs you are barred from, apply to the same job three times,
+answer screening questions wrong at scale, and add volume where volume was
+never the bottleneck. See `docs/competitors.md` for the research.
+
+So, in order:
+
+1. **The gate runs before the form is touched.** A job you do not qualify for
+   produces no plan, no documents and no submission.
+2. **The same role from two boards is one application.** A *blocked* job
+   deliberately does not enter that set, so one bad parse cannot hide a role
+   everywhere it appears.
+3. **Knockout questions come only from your answer bank.** Work authorisation,
+   sponsorship, salary, notice period, clearance, criminal record. Never
+   inferred from your resume, never defaulted. No saved answer means the run
+   stops on that job.
+4. **Nothing is submitted with an unresolved field in it** — asserted by test.
+   Any required field it could not resolve, or any unanswered knockout, and
+   auto mode drops back to fill-only.
+5. **Every field is recorded** with its value and where the value came from, so
+   a wrong answer is findable on job one instead of job forty.
+
+Three modes, and the popup explains each where you choose it:
+
+| Mode | What happens |
+| --- | --- |
+| `review` (default) | Fills everything, submits nothing |
+| `confirm` | Fills, then asks |
+| `auto` | Fills and submits — only when the gate passed and every field resolved |
+
+It never fills a password, a card number, a tax file number or a CAPTCHA. It
+identifies equal-opportunity questions in order to **skip** them: they are
+voluntary and legally sensitive, and a bot answering them for you is the wrong
+default.
+
+### What is tested, and what is not
+
+The field mapping and the runner are exercised in a real browser against
+ATS-shaped markup — open shadow DOM, framework-controlled inputs that revert a
+plain assignment, and labels associated four different ways. That works.
+
+What is **not** verified is any live logged-in SEEK, Workday or LinkedIn
+session, because that needs a real account and a real application to throw
+away. Treat platform coverage as unverified until you have run it against the
+real thing, starting in `review` mode.
+
+Their terms also prohibit automated submission, and enforcement is bot
+detection acting on your account. That risk is yours, it is real, and it is
+stated in the popup at the point you choose the mode rather than buried here.
+
 ## What it deliberately does not do
 
 - **No autofill, yet.** For a SEEK and Workday user it would add almost
@@ -99,17 +155,11 @@ not credit you with the Go programming language.
 - **No resume file parsing, yet.** PDF is a printing format with no semantic
   structure; roughly a third of real resumes parse wrongly in ways you would
   not notice. Paste works today and is honest.
-- **Never submits anything.** The final click is always yours, and that is an
-  engineering decision rather than squeamishness. SEEK, Workday, PageUp and
-  JobAdder all prohibit automated submission; the enforcement is bot detection
-  terminating the account, including your SEEK profile and every application
-  already in flight. Workday's form widgets ignore programmatic changes, so an
-  automated submission there does not fail loudly — it sends a half-empty
-  application and you find out by never hearing back. And a submission cannot
-  be undone. So everything up to the button is prepared for you, and the button
-  stays with the person whose name is on the application.
-
-See `docs/projects/jobpilot-plan.md` in Bootstrap for the full reasoning.
+- **Never submits blind.** Submission happens only in `auto` mode, only when
+  the job cleared every gate, and only when every field resolved from your
+  profile or your saved answers. The default is `review`, which submits
+  nothing. The distinction that matters is not whether it can submit — it is
+  whether it will submit something it had to guess at. It will not.
 
 ## Run
 

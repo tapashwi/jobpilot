@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "JobPilot — gated auto-apply",
+  "version": "0.2.0",
+  "description": "Fills and submits job applications, but only for jobs you actually qualify for, and never guesses a screening answer.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": [
+    "https://*.seek.com.au/*",
+    "https://*.myworkdayjobs.com/*",
+    "https://boards.greenhouse.io/*",
+    "https://job-boards.greenhouse.io/*",
+    "https://jobs.lever.co/*",
+    "https://*.ashbyhq.com/*",
+    "https://*.smartrecruiters.com/*",
+    "https://*.jobadder.com/*",
+    "https://*.pageuppeople.com/*",
+    "https://www.linkedin.com/jobs/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "JobPilot" },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.seek.com.au/*",
+        "https://*.myworkdayjobs.com/*",
+        "https://boards.greenhouse.io/*",
+        "https://job-boards.greenhouse.io/*",
+        "https://jobs.lever.co/*",
+        "https://*.ashbyhq.com/*",
+        "https://*.smartrecruiters.com/*",
+        "https://*.jobadder.com/*",
+        "https://*.pageuppeople.com/*",
+        "https://www.linkedin.com/jobs/*"
+      ],
+      "js": ["engine.js", "content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ]
+}

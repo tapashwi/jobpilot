@@ -255,6 +255,7 @@
     <button role="tab" id="t-tailor"   aria-controls="p-tailor"   aria-selected="false">Tailor resume</button>
     <button role="tab" id="t-interview" aria-controls="p-interview" aria-selected="false">Interview prep</button>
     <button role="tab" id="t-followup" aria-controls="p-followup" aria-selected="false">Follow up</button>
+    <button role="tab" id="t-answers"  aria-controls="p-answers"  aria-selected="false">Screening answers</button>
   </nav>
 </div></header>
 
@@ -430,6 +431,27 @@
         <button class="ghost" id="copyFollowup">Copy</button></div>
     </div>
     <div id="followupOut"></div>
+  </section>
+
+  <section role="tabpanel" id="p-answers" aria-labelledby="t-answers" hidden>
+    <div class="card">
+      <h3 style="margin-top:0">The answers that decide whether you get read</h3>
+      <p class="note">Every published complaint about automated applying lands in the same place:
+         the tool answered a screening question wrong, and did it on every application before
+         anyone noticed. Most applicant tracking systems treat these as auto-reject filters, so a
+         mis-toggled answer kills the application before a person sees it.</p>
+      <p class="note" style="margin-top:.6rem"><strong>The fix is not better guessing — it is
+         refusing to guess.</strong> Answer these once, deliberately. Anything you leave blank
+         makes the extension stop on that job rather than invent something. A stop costs a minute;
+         forty silently wrong applications cost the search.</p>
+      <div id="answerFields"></div>
+      <div class="actions">
+        <button id="saveAnswers">Save on this device</button>
+        <button class="ghost" id="exportAnswers">Copy for the extension</button>
+        <span class="src" id="answerState"></span>
+      </div>
+    </div>
+    <div id="answersOut"></div>
   </section>
 
 </main>

@@ -499,6 +499,64 @@
 
   $('#copyFollowup').addEventListener('click', function () { copyText(lastFollowup, this); });
 
+
+  /* ------------------------------------------------- screening answers */
+
+  var ANSWER_STORE = 'jobpilot.answers.v1';
+
+  function loadAnswers() {
+    try { return JSON.parse(localStorage.getItem(ANSWER_STORE) || '{}'); }
+    catch (e) { return {}; }
+  }
+
+  function renderAnswerFields() {
+    var saved = loadAnswers();
+    $('#answerFields').innerHTML = JP.STANDARD_ANSWERS.map(function (q) {
+      var v = saved[q.key] === undefined ? '' : saved[q.key];
+      var input = q.type === 'choice'
+        ? '<select data-ans="' + q.key + '"><option value="">— not answered —</option>' +
+          q.options.map(function (o) {
+            return '<option' + (o === v ? ' selected' : '') + '>' + esc(o) + '</option>';
+          }).join('') + '</select>'
+        : '<input type="text" data-ans="' + q.key + '" value="' + esc(v) + '" placeholder="leave blank to be asked each time" />';
+      return '<div style="margin-bottom:1rem">' +
+        '<label>' + esc(q.question) + '</label>' + input +
+        '<p class="note" style="margin-top:.4rem">' + esc(q.why) + '</p></div>';
+    }).join('');
+    renderAnswerState();
+  }
+
+  function currentAnswers() {
+    var out = {};
+    [].slice.call(document.querySelectorAll('[data-ans]')).forEach(function (el) {
+      if (el.value !== '') out[el.getAttribute('data-ans')] = el.value;
+    });
+    return out;
+  }
+
+  function renderAnswerState() {
+    var r = JP.answerReadiness(loadAnswers());
+    $('#answersOut').innerHTML = '<div class="verdict ' + (r.ready ? 'pass' : 'warn') + '">' +
+      '<h2>' + (r.ready ? 'Ready to run unattended' : 'Not ready to run unattended') + '</h2>' +
+      '<p>' + esc(r.advice) + '</p></div>';
+  }
+
+  $('#saveAnswers').addEventListener('click', function () {
+    try {
+      localStorage.setItem(ANSWER_STORE, JSON.stringify(currentAnswers()));
+      $('#answerState').textContent = 'Saved on this device.';
+    } catch (e) {
+      $('#answerState').textContent = 'This browser will not let the page store anything.';
+    }
+    renderAnswerState();
+  });
+
+  $('#exportAnswers').addEventListener('click', function () {
+    copyText(JSON.stringify({ profile: profile(), answers: currentAnswers() }, null, 2), this);
+  });
+
+  renderAnswerFields();
+
   /* ------------------------------------------------------------------- boot */
 
   $('#saveProfile').addEventListener('click', saveProfile);

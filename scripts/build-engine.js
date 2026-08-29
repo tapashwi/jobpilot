@@ -46,7 +46,10 @@ const MODULES = [
   'packages/tracker/src/pipeline.js',
   'packages/prep/src/interview.js',
   'packages/prep/src/tailor.js',
-  'packages/prep/src/followup.js'
+  'packages/prep/src/followup.js',
+  'packages/autofill/src/fieldmap.js',
+  'packages/autofill/src/answers.js',
+  'packages/autofill/src/runner.js'
 ];
 const body = MODULES.map((m) => `  // ---- ${m}\n${strip(read(m))}`).join('\n');
 
@@ -105,10 +108,29 @@ ${body}
     suggestFollowUp: suggest,
     FOLLOWUP_TEMPLATES: TEMPLATES,
     QUESTIONS_TO_ASK: QUESTIONS_TO_ASK,
-    surfaceForm: surfaceForm
+    surfaceForm: surfaceForm,
+    // autofill
+    identify: identify,
+    valueFor: valueFor,
+    planForm: planForm,
+    runOne: runOne,
+    runBatch: runBatch,
+    jobKey: jobKey,
+    answerReadiness: readiness,
+    STANDARD_ANSWERS: STANDARD,
+    lookupFreeText: lookupFreeText,
+    rememberAnswer: remember,
+    MODES: MODES
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 `;
 
-fs.writeFileSync(path.join(ROOT, 'app/engine.js'), out);
-console.log('app/engine.js built —', out.split('\n').length, 'lines');
+// Written to BOTH consumers. The extension had a hand-copied engine.js for
+// exactly one commit, which is one commit longer than a duplicated generated
+// file should ever exist — it drifts the first time someone rebuilds one and
+// not the other, and the symptom is the extension behaving differently from
+// the web app for no visible reason.
+for (const dest of ['app/engine.js', 'extension/engine.js']) {
+  fs.writeFileSync(path.join(ROOT, dest), out);
+}
+console.log('engine.js built —', out.split('\n').length, 'lines (app + extension)');
