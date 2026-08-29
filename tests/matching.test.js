@@ -314,3 +314,169 @@ describe('reading required vs preferred out of a job ad', () => {
     expect(r.skills.missingPreferred).toContain('kql');
   });
 });
+
+/**
+ * Skill names that are also ordinary English words (added with the dictionary
+ * expansion from 57 to 168 canonical skills).
+ *
+ * Before the expansion the dictionary contained no such name, so the problem
+ * did not exist. Adding "Go", "C", "R", "Rust" and "SAFe" created it: a resume
+ * saying "go live" or "a safe workplace" would be credited with skills the
+ * applicant does not have, and matched to jobs they cannot do. That is the
+ * worst direction for this tool to be wrong in, so both halves are pinned.
+ */
+describe('ambiguous skill names need corroboration', () => {
+  const { extractSkills, inListContext, AMBIGUOUS } = require('../packages/matching/src/skills');
+
+  test('prose uses of the word do not count as the skill', () => {
+    expect(extractSkills('We plan to go live in March and go to market quickly')).not.toContain('go');
+    expect(extractSkills('Ready to go the extra mile')).not.toContain('go');
+    expect(extractSkills('We are a customer-centric company')).not.toContain('c');
+    expect(extractSkills('This is a safe and inclusive workplace')).not.toContain('safe');
+  });
+
+  test('a skills list does count, because prose does not look like one', () => {
+    expect(extractSkills('Skills: Go, Python, Rust, Kubernetes')).toEqual(
+      expect.arrayContaining(['go', 'rust', 'python', 'kubernetes'])
+    );
+    expect(extractSkills('- Go\n- Python\n- Terraform')).toContain('go');
+    expect(extractSkills('Languages: C, C++, Python')).toContain('c');
+    expect(extractSkills('Frameworks: SAFe, Scrum, Kanban')).toContain('safe');
+  });
+
+  test('an unambiguous form anywhere in the text corroborates a bare mention', () => {
+    expect(extractSkills('Built the payments service in Golang')).toContain('go');
+    expect(extractSkills('Strong C programming background')).toContain('c');
+  });
+
+  /**
+   * REGRESSION. inListContext was first written against the normalised text.
+   * normalise() strips punctuation and collapses whitespace, so by then
+   * "Skills: Go, Python" has become "skills go python" and every delimiter is
+   * gone — making the list case unreachable and the guard a blanket ban.
+   */
+  test('list context is detected on raw text, where the delimiters still exist', () => {
+    expect(inListContext('Skills: Go, Python, Rust', 'go')).toBe(true);
+    expect(inListContext('we will go live shortly', 'go')).toBe(false);
+  });
+
+  /**
+   * The first version of this asserted every corroborating form was LONGER
+   * than the canonical, as a proxy for "more specific". That is not the
+   * invariant: "runbooks" is a perfectly unambiguous corroboration of
+   * "documentation" and is shorter. What actually has to hold is that a form
+   * is a different string from the canonical — corroborating a word with
+   * itself corroborates nothing.
+   */
+  test('every ambiguous entry names at least one distinct corroborating form', () => {
+    for (const [canonical, forms] of Object.entries(AMBIGUOUS)) {
+      expect(Array.isArray(forms)).toBe(true);
+      expect(forms.length).toBeGreaterThan(0);
+      for (const f of forms) expect(f).not.toBe(canonical);
+    }
+  });
+
+  /**
+   * Only words that are ALSO ordinary English belong here. Guarding a word
+   * that is unambiguous in context — "architecture", "documentation" — throws
+   * away real mentions, which is the guard causing the harm it exists to stop.
+   */
+  test('the guard covers only genuinely ambiguous words', () => {
+    for (const k of ['architecture', 'documentation', 'kubernetes', 'python']) {
+      expect(AMBIGUOUS[k]).toBeUndefined();
+    }
+    expect(Object.keys(AMBIGUOUS)).toEqual(expect.arrayContaining(['go', 'c', 'r']));
+  });
+});
+
+describe('the dictionary is broad enough to be useful', () => {
+  const { extractSkills, ALIASES, isKnown } = require('../packages/matching/src/skills');
+
+  /**
+   * The original 57 entries were skewed to one job search: Microsoft, infra
+   * and security. Redis, Kafka, Elasticsearch, Java, React Native and every
+   * data-engineering tool were absent, so a resume mentioning them matched
+   * nothing and the applicant looked unqualified.
+   */
+  test('the common technologies missing from the first version are present', () => {
+    for (const s of ['redis', 'kafka', 'elasticsearch', 'java', 'mongodb', 'apache spark',
+                     'snowflake', 'graphql', 'flutter', 'salesforce', 'sap', 'prometheus']) {
+      expect(isKnown(s)).toBe(true);
+    }
+  });
+
+  test('it carries enough skills to cover a real advertisement', () => {
+    const canonicals = Object.keys(ALIASES).filter((k) => !k.startsWith('_'));
+    expect(canonicals.length).toBeGreaterThan(150);
+  });
+
+  test('no canonical name is also an alias of a different skill', () => {
+    const canonicals = new Set(Object.keys(ALIASES).filter((k) => !k.startsWith('_')));
+    for (const [canonical, aliases] of Object.entries(ALIASES)) {
+      if (canonical.startsWith('_')) continue;
+      for (const a of aliases) {
+        if (canonicals.has(a)) {
+          throw new Error(`"${a}" is an alias of "${canonical}" and also a canonical skill`);
+        }
+      }
+    }
+  });
+
+  test('an alias is not claimed by two different canonicals', () => {
+    const owner = new Map();
+    for (const [canonical, aliases] of Object.entries(ALIASES)) {
+      if (canonical.startsWith('_')) continue;
+      for (const a of aliases) {
+        if (owner.has(a)) {
+          throw new Error(`"${a}" is claimed by both "${owner.get(a)}" and "${canonical}"`);
+        }
+        owner.set(a, canonical);
+      }
+    }
+  });
+});
+
+/**
+ * REGRESSION. An explicit null is not zero.
+ *
+ * `Number(null)` is 0, and 0 is finite, so the gates' num() helper turned a
+ * job with no advertised salary into a job paying nothing — and then blocked
+ * it for anybody who had set a minimum. Every test passed throughout, because
+ * tests OMIT the field (undefined -> NaN -> null, which is correct) while the
+ * browser sends an explicit null from an empty input. Only clicking the real
+ * button found it.
+ */
+describe('an unstated field is unknown, not zero', () => {
+  const { assess } = require('../packages/matching/src/match');
+  const PROFILE = { skills: ['kubernetes'], yearsExperience: 8, minSalary: 120000 };
+
+  test('a job with explicitly null salary is not blocked on pay', () => {
+    const a = assess(PROFILE, {
+      requiredSkills: ['kubernetes'], salaryMin: null, salaryMax: null, minYearsExperience: null
+    });
+    expect(a.blockers.map((b) => b.id)).not.toContain('salary');
+    expect(a.passed).toBe(true);
+  });
+
+  test('an omitted salary behaves the same as an explicit null', () => {
+    const omitted = assess(PROFILE, { requiredSkills: ['kubernetes'] });
+    const explicit = assess(PROFILE, { requiredSkills: ['kubernetes'], salaryMin: null, salaryMax: null });
+    expect(explicit.passed).toBe(omitted.passed);
+    expect(explicit.blockers).toEqual(omitted.blockers);
+  });
+
+  test('an empty string is unknown too — that is what a blank input sends', () => {
+    const a = assess(PROFILE, { requiredSkills: ['kubernetes'], salaryMin: '', salaryMax: '' });
+    expect(a.blockers.map((b) => b.id)).not.toContain('salary');
+  });
+
+  test('a genuinely low salary is still blocked', () => {
+    const a = assess(PROFILE, { requiredSkills: ['kubernetes'], salaryMin: 60000, salaryMax: 70000 });
+    expect(a.blockers.map((b) => b.id)).toContain('salary');
+  });
+
+  test('the experience gate has the same hazard and is also safe', () => {
+    const a = assess(PROFILE, { requiredSkills: ['kubernetes'], minYearsExperience: null });
+    expect(a.blockers.map((b) => b.id)).not.toContain('experience');
+  });
+});

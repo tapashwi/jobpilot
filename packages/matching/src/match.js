@@ -30,7 +30,22 @@ function rangesOverlap(aMin, aMax, bMin, bMax) {
   return lo1 <= hi2 && lo2 <= hi1;
 }
 
-const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : null);
+/**
+ * Number, or null.
+ *
+ * The explicit null check is load-bearing. `Number(null)` is 0 and 0 is
+ * finite, so the obvious one-liner turned "this job did not state a salary"
+ * into "this job pays zero" — and the salary gate then blocked every job
+ * without an advertised range for anyone who had set a minimum. It only
+ * escaped notice because callers that OMIT the field give undefined, which
+ * becomes NaN and behaves correctly; the browser sends explicit nulls from
+ * empty inputs, so the bug appeared in the app and not in any test.
+ */
+const num = (v) => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
 
 /**
  * The gates. Each returns null when it passes, or { id, reason, detail }

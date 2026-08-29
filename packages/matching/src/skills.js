@@ -28,7 +28,7 @@ function normalise(text) {
 const LOOKUP = (() => {
   const map = new Map();
   for (const canonical of Object.keys(ALIASES)) {
-    if (canonical.startsWith('_')) continue;
+    if (canonical.startsWith('_')) continue; // _comment, _format, _ambiguous
     map.set(normalise(canonical), canonical);
     for (const alias of ALIASES[canonical]) map.set(normalise(alias), canonical);
   }
@@ -53,9 +53,52 @@ function isKnown(skill) {
  * "go" does not fire inside "government" — the failure that makes naive
  * substring extraction useless on real resumes.
  */
+/**
+ * Skill names that are also ordinary English words.
+ *
+ * "Go" is the clearest case: a resume saying "go live", "go to market" or
+ * "ready to go" would otherwise be credited with the Go programming language,
+ * and the applicant would be matched to jobs they cannot do. The same applies
+ * to "R", "C" and "Swift".
+ *
+ * These are not dropped — that would lose every genuine mention. They are
+ * accepted only with corroboration, which is either:
+ *
+ *   (a) an unambiguous form appearing anywhere in the same text ("golang"), or
+ *   (b) the term appearing inside a delimited list, which is what a skills
+ *       section looks like: "Go, Python, Rust" or a bullet that is just "Go".
+ *
+ * Prose can produce (b) only by accident and rarely does; a skills list
+ * produces it always. That asymmetry is the whole trick.
+ */
+const AMBIGUOUS = ALIASES._ambiguous || {};
+
+function inListContext(raw, esc) {
+  // MUST run on the raw text, not the normalised text. normalise() strips
+  // punctuation and collapses whitespace, so by the time text reaches the
+  // matcher "Skills: Go, Python, Rust" has become "skills go python rust" —
+  // every delimiter this function looks for has already been deleted. Testing
+  // the normalised string here made the list case unreachable, which is the
+  // only case that lets a bare "Go" through at all.
+  const D = '(?:^|[,;:/|•·\\-\\n\\t]|\\s{2,})\\s*';
+  const E = '\\s*(?:$|[,;:/|•·\\n\\t]|\\s{2,})';
+  return new RegExp(D + esc + E, 'im').test(String(raw).toLowerCase());
+}
+
 function extractSkills(text) {
   const hay = normalise(text);
   const found = new Set();
+
+  // Corroborating forms present anywhere in this text.
+  const corroborated = new Set();
+  for (const [canonical, unambiguous] of Object.entries(AMBIGUOUS)) {
+    for (const form of unambiguous) {
+      if (hay.indexOf(normalise(form)) !== -1) {
+        corroborated.add(canonical);
+        break;
+      }
+    }
+  }
 
   for (const [alias, canonical] of LOOKUP) {
     if (!alias) continue;
@@ -75,7 +118,16 @@ function extractSkills(text) {
       '(?<![a-z0-9+#])(?<![a-z0-9]\\.)' + esc + '(?![a-z0-9+#])(?!\\.[a-z0-9])',
       'i'
     );
-    if (re.test(hay)) found.add(canonical);
+    if (!re.test(hay)) continue;
+
+    // An ambiguous canonical needs corroboration, unless the alias that
+    // matched was itself one of the unambiguous forms.
+    if (AMBIGUOUS[canonical] && !corroborated.has(canonical)) {
+      const unambiguousAlias = AMBIGUOUS[canonical].some((f) => normalise(f) === alias);
+      if (!unambiguousAlias && !inListContext(text, esc)) continue;
+    }
+
+    found.add(canonical);
   }
   return [...found].sort();
 }
@@ -110,7 +162,7 @@ function matchSkills(candidateSkills, jobRequired, jobPreferred) {
   };
 }
 
-module.exports = { normalise, canonicalise, isKnown, extractSkills, matchSkills, LOOKUP, ALIASES };
+module.exports = { normalise, canonicalise, isKnown, extractSkills, matchSkills, LOOKUP, ALIASES, AMBIGUOUS, inListContext };
 
 /**
  * Split a job ad's skills into required and preferred.

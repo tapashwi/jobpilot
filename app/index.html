@@ -3,101 +3,265 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>JobPilot — is this job worth applying to?</title>
-<meta name="description" content="Paste your resume and a job description. See exactly what matches and what is missing. Nothing is uploaded, no account, no AI." />
+<title>JobPilot — match, check, write and queue your applications</title>
+<meta name="description" content="Check a job against your resume, find what an ATS will miss, draft a tailored cover letter and selection criteria, and work a queue of applications. Runs entirely in your browser." />
 <style>
   :root {
-    --ink: #0f172a; --soft: #52607a; --line: #e2e5ec; --bg: #f7f8fa;
-    --pass: #047857; --pass-bg: #d6f5e8; --block: #b91c1c; --block-bg: #fdeaea;
-    --accent: #4338ca;
+    --ink:#0f172a; --soft:#52607a; --line:#e2e5ec; --bg:#f7f8fa; --panel:#fff;
+    --pass:#047857; --pass-bg:#d6f5e8;
+    --block:#b91c1c; --block-bg:#fdeaea;
+    --warn:#92400e; --warn-bg:#fdf0d5;
+    --accent:#4338ca; --accent-soft:#eef0fd;
+    --gap-bg:#fff7d6; --gap-ink:#7c5800; --gap-line:#e6c34a;
   }
-  * { box-sizing: border-box; }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ink:#e8ecf5; --soft:#9aa8c0; --line:#2a3550; --bg:#0b1020; --panel:#131a2e;
+      --pass:#4ade80; --pass-bg:#0f3527; --block:#fca5a5; --block-bg:#3a1414;
+      --warn:#fbbf24; --warn-bg:#3a2c0d; --accent:#a5b4fc; --accent-soft:#1e2547;
+      --gap-bg:#332a0a; --gap-ink:#fcd34d; --gap-line:#7c5800;
+    }
+  }
+  * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--ink);
     font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
-  header { background:#0b1020; color:#fff; padding:2rem 1.25rem; }
   .wrap { max-width:1100px; margin:0 auto; }
-  header h1 { margin:0; font-size:clamp(1.6rem,1.2rem+1.6vw,2.4rem); letter-spacing:-.02em; }
-  header p { margin:.5rem 0 0; color:rgba(255,255,255,.75); max-width:60ch; }
+  header { background:#0b1020; color:#fff; padding:1.75rem 1.25rem 0; }
+  header h1 { margin:0; font-size:clamp(1.5rem,1.2rem+1.4vw,2.1rem); letter-spacing:-.02em; }
+  header p { margin:.5rem 0 1.1rem; color:rgba(255,255,255,.75); max-width:64ch; }
+
+  /* Tabs */
+  .tabs { display:flex; gap:.15rem; overflow-x:auto; }
+  .tabs button { background:transparent; color:rgba(255,255,255,.7); border:0;
+    border-bottom:3px solid transparent; border-radius:0; padding:.75rem 1rem;
+    min-height:48px; font-weight:600; font-size:.94rem; white-space:nowrap; cursor:pointer; }
+  .tabs button:hover { color:#fff; }
+  .tabs button[aria-selected="true"] { color:#fff; border-bottom-color:#a5b4fc; }
   main { padding:1.5rem 1.25rem 4rem; }
+  [role=tabpanel][hidden] { display:none !important; }
+
   .cols { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
-  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:1.1rem; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:1.1rem; }
+  .card + .card { margin-top:1rem; }
   label { display:block; font-weight:650; font-size:.9rem; margin-bottom:.35rem; }
-  textarea { width:100%; min-height:220px; padding:.7rem; font:inherit; font-size:.92rem;
+  textarea { width:100%; min-height:200px; padding:.7rem; font:inherit; font-size:.92rem;
+    background:var(--panel); color:var(--ink);
     border:1px solid var(--line); border-radius:8px; resize:vertical; }
+  textarea.tall { min-height:300px; }
   .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:.75rem; margin-top:.75rem; }
-  input[type=number], input[type=text] { width:100%; height:42px; padding:0 .6rem; font:inherit;
-    border:1px solid var(--line); border-radius:8px; }
-  .check { display:flex; align-items:center; gap:.5rem; font-size:.9rem; margin-top:.6rem; }
+  input[type=number], input[type=text], select { width:100%; height:44px; padding:0 .6rem; font:inherit;
+    background:var(--panel); color:var(--ink); border:1px solid var(--line); border-radius:8px; }
+  .check { display:flex; align-items:center; gap:.5rem; font-size:.9rem; margin-top:.6rem; min-height:44px; }
+  .check input { width:20px; height:20px; }
   button { min-height:46px; padding:.6rem 1.2rem; font:inherit; font-weight:650; cursor:pointer;
     background:var(--accent); color:#fff; border:0; border-radius:9px; }
-  button.ghost { background:#fff; color:var(--ink); border:1px solid var(--line); }
-  .actions { display:flex; gap:.6rem; flex-wrap:wrap; margin:1.25rem 0; }
+  @media (prefers-color-scheme: dark) { button { color:#0b1020; } }
+  button.ghost { background:var(--panel); color:var(--ink); border:1px solid var(--line); }
+  .actions { display:flex; gap:.6rem; flex-wrap:wrap; margin:1.25rem 0; align-items:center; }
+
   .verdict { padding:1.1rem; border-radius:12px; margin-bottom:1rem; }
   .verdict.pass { background:var(--pass-bg); border:1px solid var(--pass); }
   .verdict.block { background:var(--block-bg); border:1px solid var(--block); }
-  .verdict h2 { margin:0 0 .3rem; font-size:1.25rem; }
+  .verdict.warn { background:var(--warn-bg); border:1px solid var(--warn); }
+  .verdict h2 { margin:0 0 .3rem; font-size:1.2rem; }
   .verdict p { margin:0; }
+
   .blockers { list-style:none; padding:0; margin:.75rem 0 0; }
-  .blockers li { padding:.6rem .75rem; background:#fff; border-radius:8px; margin-bottom:.4rem; }
+  .blockers li { padding:.6rem .75rem; background:var(--panel); border-radius:8px; margin-bottom:.4rem; }
   .blockers strong { display:block; }
   .blockers span { color:var(--soft); font-size:.9rem; }
+
   .chips { display:flex; flex-wrap:wrap; gap:.35rem; margin:.4rem 0 1rem; }
-  .chip { font-size:.85rem; padding:.25rem .6rem; border-radius:999px; background:#eef0f4; }
+  .chip { font-size:.85rem; padding:.25rem .6rem; border-radius:999px; background:var(--accent-soft); }
   .chip.have { background:var(--pass-bg); color:var(--pass); }
   .chip.miss { background:var(--block-bg); color:var(--block); }
   h3 { margin:1.2rem 0 .2rem; font-size:.95rem; }
   .note { font-size:.86rem; color:var(--soft); border-left:3px solid var(--line); padding-left:.75rem; }
+
+  /* Findings */
+  .finding { border:1px solid var(--line); border-left-width:4px; border-radius:10px;
+    padding:.8rem .9rem; margin-bottom:.6rem; background:var(--panel); }
+  .finding.critical { border-left-color:var(--block); }
+  .finding.warning  { border-left-color:var(--warn); }
+  .finding.info     { border-left-color:var(--soft); }
+  .finding h4 { margin:0 0 .3rem; font-size:.98rem; display:flex; gap:.5rem; align-items:baseline; flex-wrap:wrap; }
+  .sev { font-size:.7rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase;
+    padding:.15rem .45rem; border-radius:5px; }
+  .sev.critical { background:var(--block-bg); color:var(--block); }
+  .sev.warning  { background:var(--warn-bg); color:var(--warn); }
+  .sev.info     { background:var(--accent-soft); color:var(--soft); }
+  .finding p { margin:.25rem 0; font-size:.92rem; }
+  .finding .fix { color:var(--soft); }
+
+  /* Generated documents */
+  .doc { white-space:pre-wrap; font:inherit; background:var(--panel); border:1px solid var(--line);
+    border-radius:10px; padding:1rem; line-height:1.7; }
+  .doc mark { background:var(--gap-bg); color:var(--gap-ink); border:1px dashed var(--gap-line);
+    border-radius:4px; padding:0 .2rem; }
+  .readiness { display:inline-block; font-size:.8rem; font-weight:700; padding:.2rem .55rem;
+    border-radius:999px; background:var(--warn-bg); color:var(--warn); margin-left:.5rem; }
+  .readiness.done { background:var(--pass-bg); color:var(--pass); }
+  .src { font-size:.85rem; color:var(--soft); }
+  .src li { margin-bottom:.35rem; }
+
+  /* Queue */
+  .qrow { display:grid; grid-template-columns:1fr auto; gap:.75rem; align-items:center;
+    border:1px solid var(--line); border-left-width:4px; border-radius:10px;
+    padding:.75rem .9rem; margin-bottom:.5rem; background:var(--panel); }
+  .qrow.ready { border-left-color:var(--pass); }
+  .qrow.fix-first { border-left-color:var(--warn); }
+  .qrow.skip { border-left-color:var(--block); opacity:.75; }
+  .qrow h4 { margin:0; font-size:1rem; }
+  .qrow .meta { font-size:.86rem; color:var(--soft); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(110px,1fr)); gap:.6rem; margin-bottom:1rem; }
+  .stat { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:.7rem .8rem; }
+  .stat b { display:block; font-size:1.5rem; line-height:1.2; }
+  .stat span { font-size:.8rem; color:var(--soft); }
+
   @media (max-width:860px) { .cols { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
 <header><div class="wrap">
-  <h1>Is this job worth applying to?</h1>
-  <p>Paste your resume and the job ad. You get the honest answer: what you match, what you are
-     missing, and which requirement would actually stop you. Your resume stays on this device —
-     nothing is uploaded, there is no account, and no AI is involved.</p>
+  <h1>JobPilot</h1>
+  <p>Match a job against your resume, see what an applicant tracking system will miss, draft a
+     cover letter and selection criteria from your own achievements, and work through a queue of
+     applications. Everything runs on this device: nothing is uploaded, there is no account, and
+     no text is sent to a model.</p>
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button role="tab" id="t-profile"  aria-controls="p-profile"  aria-selected="true">Your profile</button>
+    <button role="tab" id="t-match"    aria-controls="p-match"    aria-selected="false">Check one job</button>
+    <button role="tab" id="t-ats"      aria-controls="p-ats"      aria-selected="false">ATS check</button>
+    <button role="tab" id="t-letter"   aria-controls="p-letter"   aria-selected="false">Cover letter</button>
+    <button role="tab" id="t-criteria" aria-controls="p-criteria" aria-selected="false">Selection criteria</button>
+    <button role="tab" id="t-queue"    aria-controls="p-queue"    aria-selected="false">Apply in bulk</button>
+  </nav>
 </div></header>
 
 <main class="wrap">
-  <div class="cols">
+
+  <section role="tabpanel" id="p-profile" aria-labelledby="t-profile">
     <div class="card">
-      <label for="resume">Your resume or profile</label>
-      <textarea id="resume" placeholder="Paste your resume text here…"></textarea>
+      <label for="resume">Your resume, as text</label>
+      <textarea id="resume" class="tall" placeholder="Open your resume PDF, select all, copy, paste here…"></textarea>
+      <p class="note" style="margin-top:.6rem">
+        What you paste is close to what an applicant tracking system extracts — both come from the
+        same text layer in the PDF. So if it looks scrambled here, that is not a paste problem to
+        work around. It is a preview of the parse, and the ATS check will say so.
+      </p>
       <div class="row">
-        <div><label for="years">Years of experience</label><input type="number" id="years" min="0" step="0.5" placeholder="3" /></div>
-        <div><label for="minsal">Minimum salary</label><input type="number" id="minsal" min="0" step="1000" placeholder="95000" /></div>
+        <div><label for="name">Your name</label><input type="text" id="name" placeholder="Jane Doe" /></div>
+        <div><label for="email">Email</label><input type="text" id="email" placeholder="jane@example.com" /></div>
+        <div><label for="phone">Phone</label><input type="text" id="phone" placeholder="+61 400 000 000" /></div>
+      </div>
+      <div class="row">
+        <div><label for="years">Years of experience</label><input type="number" id="years" min="0" step="0.5" placeholder="8" /></div>
+        <div><label for="minsal">Minimum salary</label><input type="number" id="minsal" min="0" step="1000" placeholder="120000" /></div>
       </div>
       <label class="check"><input type="checkbox" id="remote" /> I require remote or hybrid</label>
       <label class="check"><input type="checkbox" id="sponsor" /> I need visa sponsorship</label>
+      <div class="actions">
+        <button id="saveProfile">Save on this device</button>
+        <button class="ghost" id="clearProfile">Clear</button>
+        <span class="src" id="profileState"></span>
+      </div>
+      <p class="note">Saved in this browser's own storage. It never leaves the device, and clearing
+         your browser data removes it.</p>
     </div>
+  </section>
 
+  <section role="tabpanel" id="p-match" aria-labelledby="t-match" hidden>
     <div class="card">
-      <label for="job">The job description</label>
-      <textarea id="job" placeholder="Paste the job ad here — from SEEK, Workday, anywhere…"></textarea>
+      <label for="job">The job advertisement</label>
+      <textarea id="job" placeholder="Paste the ad here — from SEEK, Workday, anywhere…"></textarea>
       <div class="row">
-        <div><label for="jyears">Years required</label><input type="number" id="jyears" min="0" step="0.5" placeholder="2" /></div>
-        <div><label for="jmin">Pay from</label><input type="number" id="jmin" min="0" step="1000" placeholder="95000" /></div>
-        <div><label for="jmax">Pay to</label><input type="number" id="jmax" min="0" step="1000" placeholder="110000" /></div>
+        <div><label for="jyears">Years required</label><input type="number" id="jyears" min="0" step="0.5" placeholder="3" /></div>
+        <div><label for="jmin">Pay from</label><input type="number" id="jmin" min="0" step="1000" /></div>
+        <div><label for="jmax">Pay to</label><input type="number" id="jmax" min="0" step="1000" /></div>
       </div>
       <div class="row">
-        <div><label for="jreq">Required skills (comma separated, optional)</label><input type="text" id="jreq" placeholder="left blank = read from the ad" /></div>
+        <div><label for="jreq">Required skills (comma separated, optional)</label>
+             <input type="text" id="jreq" placeholder="left blank = read from the ad" /></div>
       </div>
+      <div class="actions"><button id="go">Check this job</button><button class="ghost" id="clearJob">Clear</button></div>
     </div>
-  </div>
+    <div id="matchOut"></div>
+  </section>
 
-  <div class="actions">
-    <button id="go">Check this job</button>
-    <button class="ghost" id="clear">Clear</button>
-  </div>
+  <section role="tabpanel" id="p-ats" aria-labelledby="t-ats" hidden>
+    <div class="card">
+      <p class="note">Checks your resume for the things that stop an applicant tracking system
+         reading it properly. Paste an advertisement as well and it also checks how much of that
+         ad's vocabulary your resume actually contains.</p>
+      <label for="atsJob" style="margin-top:.8rem">Job advertisement (optional)</label>
+      <textarea id="atsJob" style="min-height:130px" placeholder="Optional — for keyword coverage against one specific ad"></textarea>
+      <div class="actions"><button id="runAts">Check my resume</button></div>
+    </div>
+    <div id="atsOut"></div>
+  </section>
 
-  <div id="out"></div>
+  <section role="tabpanel" id="p-letter" aria-labelledby="t-letter" hidden>
+    <div class="card">
+      <div class="row">
+        <div><label for="lTitle">Role title</label><input type="text" id="lTitle" placeholder="Platform Engineer" /></div>
+        <div><label for="lCompany">Company</label><input type="text" id="lCompany" placeholder="Canva" /></div>
+        <div><label for="lManager">Hiring manager (optional)</label><input type="text" id="lManager" placeholder="Sam Patel" /></div>
+      </div>
+      <div class="row">
+        <div><label for="lTone">Tone</label>
+          <select id="lTone">
+            <option value="plain">Plain</option>
+            <option value="warm">Warm</option>
+            <option value="formal">Formal</option>
+          </select></div>
+      </div>
+      <label for="lJob" style="margin-top:.8rem">The job advertisement</label>
+      <textarea id="lJob" placeholder="Paste the ad — the required skills are read from it"></textarea>
+      <div class="actions"><button id="runLetter">Draft the letter</button>
+        <button class="ghost" id="copyLetter">Copy</button></div>
+      <p class="note">Every sentence about your experience is built from a line that is already in
+         your resume, and the letter shows you which. Where there is nothing to build from, you get
+         a marked blank rather than an invented claim — that is the part you have to write, and it
+         is the part that gets read.</p>
+    </div>
+    <div id="letterOut"></div>
+  </section>
 
-  <p class="note" style="margin-top:2rem">
-    JobPilot never submits anything and never fills a form for you. It reads what you paste,
-    on your device. Skills are matched through an alias dictionary, so “k8s” and “Kubernetes”
-    count as the same thing — but that dictionary is not exhaustive, and a skill it does not
-    know will show as missing. Check the lists before trusting them.
-  </p>
+  <section role="tabpanel" id="p-criteria" aria-labelledby="t-criteria" hidden>
+    <div class="card">
+      <p class="note">Australian public sector, universities and many not-for-profits ask you to
+         address selection criteria one at a time. A panel scores each separately, so a cover letter
+         that gestures at all of them scores nothing on any of them.</p>
+      <label for="cText" style="margin-top:.8rem">The selection criteria</label>
+      <textarea id="cText" placeholder="Paste the numbered or bulleted list from the position description…"></textarea>
+      <div class="row">
+        <div><label for="cLen">Words per response</label>
+          <select id="cLen">
+            <option value="brief">Brief (~150)</option>
+            <option value="standard" selected>Standard (~250)</option>
+            <option value="detailed">Detailed (~500)</option>
+          </select></div>
+      </div>
+      <div class="actions"><button id="runCriteria">Draft STAR responses</button>
+        <button class="ghost" id="copyCriteria">Copy all</button></div>
+    </div>
+    <div id="criteriaOut"></div>
+  </section>
+
+  <section role="tabpanel" id="p-queue" aria-labelledby="t-queue" hidden>
+    <div class="card">
+      <p class="note">Paste as many advertisements as you like, separated by a line of three
+         dashes. Each one is gated against your profile, ranked, and given its own cover letter and
+         resume gap list. Jobs you are barred from by a stated requirement get no documents — the
+         point is to stop you spending an evening on applications that cannot succeed.</p>
+      <label for="qBlob" style="margin-top:.8rem">Job advertisements</label>
+      <textarea id="qBlob" class="tall" placeholder="First advertisement…&#10;&#10;---&#10;&#10;Second advertisement…"></textarea>
+      <div class="actions"><button id="runQueue">Build the queue</button>
+        <button class="ghost" id="exportQueue">Export as JSON</button></div>
+    </div>
+    <div id="queueOut"></div>
+  </section>
+
 </main>
 
 <script src="engine.js"></script>

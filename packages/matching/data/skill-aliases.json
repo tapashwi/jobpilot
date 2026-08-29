@@ -1,62 +1,785 @@
 {
   "_comment": "Skill aliases. THE MATCHER LIVES OR DIES HERE: if a resume says 'k8s' and a posting says 'Kubernetes' and this file does not connect them, every number downstream is wrong. Data, not code, so it can be extended without a release. Canonical name -> every form seen in the wild.",
   "_format": "canonical: [alias, ...]. Matching is case-insensitive and punctuation-insensitive; do not add case variants.",
-
-  "kubernetes": ["k8s", "kube"],
-  "docker": ["containerisation", "containerization", "docker containers"],
-  "amazon web services": ["aws", "amazon aws"],
-  "microsoft azure": ["azure", "ms azure", "windows azure"],
-  "google cloud platform": ["gcp", "google cloud"],
-  "microsoft entra id": ["azure ad", "azure active directory", "aad", "entra"],
-  "active directory": ["ad ds", "windows active directory", "on-prem ad"],
-  "microsoft intune": ["intune", "endpoint manager", "mem", "microsoft endpoint manager"],
-  "microsoft defender": ["defender", "defender for endpoint", "mde", "windows defender"],
-  "microsoft 365": ["m365", "o365", "office 365", "microsoft office 365"],
-  "powershell": ["ps1", "windows powershell"],
-  "javascript": ["js", "ecmascript", "es6", "es2015"],
-  "typescript": ["ts"],
-  "python": ["python3", "py"],
-  "c#": ["c sharp", "csharp", "dotnet c#"],
-  ".net": ["dotnet", "dot net", ".net core", "asp.net"],
-  "sql": ["t-sql", "tsql", "structured query language"],
-  "postgresql": ["postgres", "psql"],
-  "microsoft sql server": ["mssql", "sql server"],
-  "mysql": ["maria db", "mariadb"],
-  "terraform": ["hashicorp terraform", "iac terraform"],
-  "ansible": ["red hat ansible"],
-  "ci/cd": ["cicd", "continuous integration", "continuous delivery", "continuous deployment", "build pipeline"],
-  "github actions": ["gh actions"],
-  "azure devops": ["ado", "vsts", "tfs", "team foundation server"],
+  "_ambiguous": {
+    "go": [
+      "golang",
+      "go lang",
+      "go programming"
+    ],
+    "c": [
+      "c programming",
+      "ansi c",
+      "embedded c"
+    ],
+    "r": [
+      "r language",
+      "rstudio",
+      "r studio"
+    ],
+    "swift": [
+      "swiftui",
+      "swift ios"
+    ],
+    "rust": [
+      "rust lang",
+      "rustlang"
+    ],
+    "spring": [
+      "spring boot",
+      "springboot"
+    ],
+    "express": [
+      "express.js",
+      "expressjs"
+    ],
+    "safe": [
+      "scaled agile framework",
+      "pi planning"
+    ]
+  },
+  "kubernetes": [
+    "k8s",
+    "kube"
+  ],
+  "docker": [
+    "containerisation",
+    "containerization",
+    "docker containers"
+  ],
+  "amazon web services": [
+    "aws",
+    "amazon aws"
+  ],
+  "microsoft azure": [
+    "azure",
+    "ms azure",
+    "windows azure"
+  ],
+  "google cloud platform": [
+    "gcp",
+    "google cloud"
+  ],
+  "microsoft entra id": [
+    "azure ad",
+    "azure active directory",
+    "aad",
+    "entra"
+  ],
+  "active directory": [
+    "ad ds",
+    "windows active directory",
+    "on-prem ad"
+  ],
+  "microsoft intune": [
+    "intune",
+    "endpoint manager",
+    "mem",
+    "microsoft endpoint manager"
+  ],
+  "microsoft defender": [
+    "defender",
+    "defender for endpoint",
+    "mde",
+    "windows defender"
+  ],
+  "microsoft 365": [
+    "m365",
+    "o365",
+    "office 365",
+    "microsoft office 365"
+  ],
+  "powershell": [
+    "ps1",
+    "windows powershell"
+  ],
+  "javascript": [
+    "js",
+    "ecmascript",
+    "es6",
+    "es2015"
+  ],
+  "typescript": [
+    "ts"
+  ],
+  "python": [
+    "python3",
+    "py"
+  ],
+  "c#": [
+    "c sharp",
+    "csharp",
+    "dotnet c#"
+  ],
+  ".net": [
+    "dotnet",
+    "dot net",
+    ".net core",
+    "asp.net"
+  ],
+  "sql": [
+    "t-sql",
+    "tsql",
+    "structured query language"
+  ],
+  "postgresql": [
+    "postgres",
+    "psql"
+  ],
+  "microsoft sql server": [
+    "mssql",
+    "sql server"
+  ],
+  "mysql": [
+    "maria db",
+    "mariadb"
+  ],
+  "terraform": [
+    "hashicorp terraform",
+    "iac terraform"
+  ],
+  "ansible": [
+    "red hat ansible"
+  ],
+  "ci/cd": [
+    "cicd",
+    "continuous integration",
+    "continuous delivery",
+    "continuous deployment",
+    "build pipeline"
+  ],
+  "github actions": [
+    "gh actions"
+  ],
+  "azure devops": [
+    "ado",
+    "vsts",
+    "tfs",
+    "team foundation server"
+  ],
   "jenkins": [],
-  "git": ["version control", "source control"],
-  "linux": ["unix", "rhel", "red hat enterprise linux", "ubuntu server", "centos"],
-  "windows server": ["win server", "windows server administration"],
-  "vmware": ["vsphere", "esxi", "vcenter"],
-  "hyper-v": ["hyperv", "microsoft hyper-v"],
-  "networking": ["tcp/ip", "tcpip", "lan", "wan", "routing and switching"],
-  "cisco": ["ios-xe", "cisco ios"],
-  "firewall": ["firewalls", "palo alto", "fortinet", "fortigate", "checkpoint", "asa"],
-  "vpn": ["virtual private network", "ipsec", "ssl vpn"],
-  "siem": ["security information and event management", "splunk", "sentinel", "microsoft sentinel", "qradar", "log analytics"],
-  "kql": ["kusto", "kusto query language"],
-  "soc": ["security operations centre", "security operations center"],
-  "incident response": ["ir", "dfir", "digital forensics and incident response"],
-  "penetration testing": ["pen testing", "pentest", "pentesting", "ethical hacking"],
-  "vulnerability management": ["vuln management", "patch management", "nessus", "qualys", "tenable"],
-  "iso 27001": ["iso27001", "isms", "iso/iec 27001"],
-  "essential eight": ["essential 8", "e8", "acsc essential eight"],
-  "nist": ["nist csf", "nist cybersecurity framework", "nist 800-53"],
-  "itil": ["itil v4", "itil 4", "service management"],
-  "servicenow": ["snow", "service now"],
-  "jira": ["atlassian jira"],
-  "confluence": ["atlassian confluence"],
-  "agile": ["scrum", "kanban", "agile delivery"],
-  "react": ["react.js", "reactjs"],
-  "node.js": ["node", "nodejs"],
-  "rest api": ["restful api", "rest apis", "web api", "api development"],
-  "power bi": ["powerbi", "microsoft power bi"],
-  "excel": ["microsoft excel", "advanced excel"],
-  "sharepoint": ["microsoft sharepoint", "sharepoint online"],
-  "backup and recovery": ["veeam", "backup", "disaster recovery", "dr", "bcp"],
-  "help desk": ["helpdesk", "service desk", "desktop support", "level 1 support", "l1 support", "level 2 support", "l2 support"]
+  "git": [
+    "version control",
+    "source control"
+  ],
+  "linux": [
+    "unix",
+    "rhel",
+    "red hat enterprise linux",
+    "ubuntu server",
+    "centos"
+  ],
+  "windows server": [
+    "win server",
+    "windows server administration"
+  ],
+  "vmware": [
+    "vsphere",
+    "esxi",
+    "vcenter"
+  ],
+  "hyper-v": [
+    "hyperv",
+    "microsoft hyper-v"
+  ],
+  "networking": [
+    "tcp/ip",
+    "tcpip",
+    "lan",
+    "wan",
+    "routing and switching"
+  ],
+  "cisco": [
+    "ios-xe",
+    "cisco ios"
+  ],
+  "firewall": [
+    "firewalls",
+    "palo alto",
+    "fortinet",
+    "fortigate",
+    "checkpoint",
+    "asa"
+  ],
+  "vpn": [
+    "virtual private network",
+    "ipsec",
+    "ssl vpn"
+  ],
+  "siem": [
+    "security information and event management",
+    "splunk",
+    "sentinel",
+    "microsoft sentinel",
+    "qradar",
+    "log analytics",
+    "splunk enterprise",
+    "spl"
+  ],
+  "kql": [
+    "kusto",
+    "kusto query language"
+  ],
+  "soc": [
+    "security operations centre",
+    "security operations center"
+  ],
+  "incident response": [
+    "ir",
+    "dfir",
+    "digital forensics and incident response"
+  ],
+  "penetration testing": [
+    "pen testing",
+    "pentest",
+    "pentesting",
+    "ethical hacking"
+  ],
+  "vulnerability management": [
+    "vuln management",
+    "patch management",
+    "nessus",
+    "qualys",
+    "tenable"
+  ],
+  "iso 27001": [
+    "iso27001",
+    "isms",
+    "iso/iec 27001"
+  ],
+  "essential eight": [
+    "essential 8",
+    "e8",
+    "acsc essential eight"
+  ],
+  "nist": [
+    "nist csf",
+    "nist cybersecurity framework",
+    "nist 800-53"
+  ],
+  "itil": [
+    "itil v4",
+    "itil 4",
+    "service management"
+  ],
+  "servicenow": [
+    "snow",
+    "service now"
+  ],
+  "jira": [
+    "atlassian jira"
+  ],
+  "confluence": [
+    "atlassian confluence"
+  ],
+  "agile": [
+    "agile delivery"
+  ],
+  "react": [
+    "react.js",
+    "reactjs"
+  ],
+  "node.js": [
+    "node",
+    "nodejs"
+  ],
+  "rest api": [
+    "restful api",
+    "rest apis",
+    "web api",
+    "api development"
+  ],
+  "power bi": [
+    "powerbi",
+    "microsoft power bi"
+  ],
+  "excel": [
+    "microsoft excel",
+    "advanced excel"
+  ],
+  "sharepoint": [
+    "microsoft sharepoint",
+    "sharepoint online"
+  ],
+  "backup and recovery": [
+    "veeam",
+    "backup",
+    "disaster recovery",
+    "dr",
+    "bcp"
+  ],
+  "help desk": [
+    "helpdesk",
+    "service desk",
+    "desktop support",
+    "level 1 support",
+    "l1 support",
+    "level 2 support",
+    "l2 support"
+  ],
+  "java": [
+    "java se",
+    "java ee",
+    "j2ee",
+    "core java"
+  ],
+  "go": [
+    "golang",
+    "go lang",
+    "go programming"
+  ],
+  "rust": [
+    "rust lang",
+    "rustlang"
+  ],
+  "php": [
+    "php8",
+    "php 8"
+  ],
+  "ruby": [
+    "ruby on rails",
+    "rails",
+    "ror"
+  ],
+  "kotlin": [
+    "kotlin jvm"
+  ],
+  "swift": [
+    "swiftui",
+    "swift ios"
+  ],
+  "scala": [
+    "scala jvm"
+  ],
+  "c++": [
+    "cpp",
+    "c plus plus"
+  ],
+  "c": [
+    "c programming",
+    "ansi c",
+    "embedded c"
+  ],
+  "r": [
+    "r language",
+    "rstudio",
+    "r studio"
+  ],
+  "matlab": [
+    "mat lab"
+  ],
+  "bash": [
+    "shell scripting",
+    "shell script",
+    "sh scripting",
+    "zsh"
+  ],
+  "perl": [],
+  "dart": [
+    "dart lang"
+  ],
+  "angular": [
+    "angularjs",
+    "angular 2+"
+  ],
+  "vue.js": [
+    "vue",
+    "vuejs",
+    "vue 3"
+  ],
+  "svelte": [
+    "sveltekit"
+  ],
+  "next.js": [
+    "nextjs",
+    "next js"
+  ],
+  "html": [
+    "html5"
+  ],
+  "css": [
+    "css3",
+    "scss",
+    "sass",
+    "tailwind",
+    "tailwind css"
+  ],
+  "webpack": [
+    "vite",
+    "rollup",
+    "bundler"
+  ],
+  "redux": [
+    "state management"
+  ],
+  "jquery": [],
+  "accessibility": [
+    "wcag",
+    "a11y",
+    "screen reader",
+    "aria"
+  ],
+  "react native": [
+    "reactnative",
+    "rn"
+  ],
+  "flutter": [
+    "flutter sdk"
+  ],
+  "android": [
+    "android sdk",
+    "android studio"
+  ],
+  "ios": [
+    "xcode",
+    "ios development"
+  ],
+  "graphql": [
+    "apollo",
+    "graph ql"
+  ],
+  "grpc": [
+    "protocol buffers",
+    "protobuf"
+  ],
+  "microservices": [
+    "micro services",
+    "service oriented architecture",
+    "soa"
+  ],
+  "django": [
+    "django rest framework",
+    "drf"
+  ],
+  "flask": [
+    "flask api"
+  ],
+  "fastapi": [
+    "fast api"
+  ],
+  "spring": [
+    "spring boot",
+    "springboot"
+  ],
+  "express": [
+    "express.js",
+    "expressjs"
+  ],
+  "laravel": [],
+  "redis": [
+    "redis cache",
+    "elasticache"
+  ],
+  "valkey": [
+    "valkey server"
+  ],
+  "memcached": [
+    "memcache"
+  ],
+  "mongodb": [
+    "mongo",
+    "documentdb"
+  ],
+  "cassandra": [
+    "scylladb",
+    "scylla"
+  ],
+  "elasticsearch": [
+    "elastic search",
+    "opensearch",
+    "elk",
+    "elk stack"
+  ],
+  "dynamodb": [
+    "dynamo db",
+    "dynamo"
+  ],
+  "oracle database": [
+    "oracle db",
+    "plsql",
+    "pl/sql"
+  ],
+  "sqlite": [
+    "sql lite"
+  ],
+  "neo4j": [
+    "graph database",
+    "cypher"
+  ],
+  "kafka": [
+    "apache kafka",
+    "confluent",
+    "event streaming"
+  ],
+  "rabbitmq": [
+    "rabbit mq",
+    "amqp"
+  ],
+  "sqs": [
+    "amazon sqs",
+    "simple queue service"
+  ],
+  "apache spark": [
+    "spark",
+    "pyspark"
+  ],
+  "databricks": [
+    "data bricks"
+  ],
+  "snowflake": [
+    "snowflake data cloud"
+  ],
+  "dbt": [
+    "data build tool"
+  ],
+  "apache airflow": [
+    "airflow",
+    "dag orchestration"
+  ],
+  "etl": [
+    "elt",
+    "data pipeline",
+    "data pipelines",
+    "data ingestion"
+  ],
+  "tableau": [],
+  "looker": [
+    "looker studio",
+    "data studio"
+  ],
+  "data warehousing": [
+    "data warehouse",
+    "bigquery",
+    "redshift",
+    "synapse"
+  ],
+  "pandas": [
+    "numpy",
+    "dataframes"
+  ],
+  "machine learning": [
+    "ml",
+    "predictive modelling",
+    "predictive modeling"
+  ],
+  "deep learning": [
+    "neural networks",
+    "pytorch",
+    "tensorflow",
+    "keras"
+  ],
+  "natural language processing": [
+    "nlp",
+    "text mining"
+  ],
+  "computer vision": [
+    "cv",
+    "opencv",
+    "image recognition"
+  ],
+  "mlops": [
+    "ml ops",
+    "model deployment",
+    "mlflow"
+  ],
+  "large language models": [
+    "llm",
+    "llms",
+    "genai",
+    "generative ai",
+    "prompt engineering",
+    "rag"
+  ],
+  "serverless": [
+    "aws lambda",
+    "lambda",
+    "azure functions",
+    "cloud functions"
+  ],
+  "helm": [
+    "helm charts"
+  ],
+  "istio": [
+    "service mesh",
+    "linkerd"
+  ],
+  "openshift": [
+    "red hat openshift",
+    "okd"
+  ],
+  "cloudformation": [
+    "cloud formation",
+    "cdk",
+    "aws cdk"
+  ],
+  "pulumi": [],
+  "gitlab ci": [
+    "gitlab",
+    "gitlab pipelines"
+  ],
+  "argo cd": [
+    "argocd",
+    "gitops",
+    "flux cd"
+  ],
+  "nginx": [
+    "reverse proxy",
+    "load balancing"
+  ],
+  "apache http server": [
+    "apache2",
+    "httpd"
+  ],
+  "prometheus": [
+    "promql"
+  ],
+  "grafana": [
+    "grafana dashboards"
+  ],
+  "datadog": [
+    "data dog"
+  ],
+  "new relic": [
+    "newrelic"
+  ],
+  "opentelemetry": [
+    "open telemetry",
+    "otel",
+    "distributed tracing"
+  ],
+  "observability": [
+    "monitoring and alerting",
+    "apm",
+    "application performance monitoring"
+  ],
+  "unit testing": [
+    "jest",
+    "pytest",
+    "junit",
+    "nunit",
+    "xunit",
+    "test driven development",
+    "tdd"
+  ],
+  "playwright": [
+    "puppeteer"
+  ],
+  "selenium": [
+    "webdriver"
+  ],
+  "cypress": [
+    "cypress.io"
+  ],
+  "performance testing": [
+    "load testing",
+    "jmeter",
+    "k6",
+    "gatling"
+  ],
+  "quality assurance": [
+    "qa",
+    "test automation",
+    "automated testing"
+  ],
+  "sap": [
+    "sap erp",
+    "s/4hana",
+    "sap hana"
+  ],
+  "salesforce": [
+    "sfdc",
+    "apex",
+    "sales cloud",
+    "service cloud"
+  ],
+  "workday": [
+    "workday hcm"
+  ],
+  "dynamics 365": [
+    "ms dynamics",
+    "d365"
+  ],
+  "power platform": [
+    "power automate",
+    "power apps",
+    "powerapps"
+  ],
+  "xero": [
+    "myob"
+  ],
+  "zero trust": [
+    "zta",
+    "least privilege"
+  ],
+  "iam": [
+    "identity and access management",
+    "rbac",
+    "sso",
+    "single sign on",
+    "oauth",
+    "saml",
+    "oidc"
+  ],
+  "cryptography": [
+    "encryption",
+    "pki",
+    "tls",
+    "certificate management"
+  ],
+  "devsecops": [
+    "dev sec ops",
+    "sast",
+    "dast",
+    "supply chain security"
+  ],
+  "soc 2": [
+    "soc2",
+    "soc ii"
+  ],
+  "gdpr": [
+    "privacy act",
+    "data privacy",
+    "apps",
+    "australian privacy principles"
+  ],
+  "threat modelling": [
+    "threat modeling",
+    "stride",
+    "attack surface"
+  ],
+  "scrum": [
+    "scrum master",
+    "sprint planning",
+    "ceremonies"
+  ],
+  "kanban": [
+    "wip limits"
+  ],
+  "safe": [
+    "scaled agile framework",
+    "pi planning"
+  ],
+  "stakeholder management": [
+    "stakeholder engagement",
+    "business partnering"
+  ],
+  "technical writing": [
+    "documentation",
+    "runbooks",
+    "knowledge base articles"
+  ],
+  "mentoring": [
+    "coaching",
+    "onboarding engineers",
+    "technical leadership"
+  ],
+  "code review": [
+    "peer review",
+    "pull request review"
+  ],
+  "architecture": [
+    "solution architecture",
+    "system design",
+    "technical design"
+  ]
 }

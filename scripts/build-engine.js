@@ -2,8 +2,14 @@
 /**
  * build-engine.js — bundle the matching engine into one browser file.
  *
- * A thirty-line concatenation instead of a bundler. The app is two modules and
- * a JSON file; adding Vite to move them would be more configuration than code.
+ * A concatenation instead of a bundler. The app is a handful of modules and a
+ * JSON file; adding Vite to move them would be more configuration than code.
+ *
+ * ORDER MATTERS, and it is the only fragile thing here: every module lands in
+ * one shared scope, so a module must appear after the ones it uses. Two
+ * modules declaring the same `const` is a syntax error that takes the whole
+ * app down on load, which is why GAP lives in evidence.js and not in both
+ * generators that need it.
  *
  * The point is that the browser build is GENERATED, so it cannot drift from
  * the source the tests exercise. Maintaining a hand-written "browser copy" is
@@ -28,8 +34,18 @@ function strip(src) {
 }
 
 const aliases = read('packages/matching/data/skill-aliases.json');
-const skills = strip(read('packages/matching/src/skills.js'));
-const match = strip(read('packages/matching/src/match.js'));
+
+// Dependency order, innermost first.
+const MODULES = [
+  'packages/matching/src/skills.js',
+  'packages/matching/src/match.js',
+  'packages/documents/src/evidence.js',
+  'packages/documents/src/cover-letter.js',
+  'packages/documents/src/selection-criteria.js',
+  'packages/ats/src/ats-check.js',
+  'packages/tracker/src/pipeline.js'
+];
+const body = MODULES.map((m) => `  // ---- ${m}\n${strip(read(m))}`).join('\n');
 
 const out = `/**
  * GENERATED FILE — do not edit.
@@ -43,10 +59,10 @@ const out = `/**
 
   const ALIASES = ${aliases};
 
-${skills}
-${match}
+${body}
 
   root.JobPilot = {
+    // matching
     normalise: normalise,
     canonicalise: canonicalise,
     isKnown: isKnown,
@@ -57,7 +73,28 @@ ${match}
     softScore: softScore,
     parseJobSkills: parseJobSkills,
     PREFERRED_MARKERS: PREFERRED_MARKERS,
-    GATES: GATES
+    GATES: GATES,
+    // evidence and documents
+    statements: statements,
+    evidenceFor: evidenceFor,
+    strongest: strongest,
+    coverLetter: coverLetter,
+    parseCriteria: parseCriteria,
+    draftResponse: draftResponse,
+    draftAll: draftAll,
+    behaviouralKind: behaviouralKind,
+    LIMITS: LIMITS,
+    // ats
+    checkResume: checkResume,
+    keywordCoverage: keywordCoverage,
+    // pipeline
+    splitAdvertisements: splitAdvertisements,
+    parseAdvertisement: parseAdvertisement,
+    buildPack: buildPack,
+    buildQueue: buildQueue,
+    transition: transition,
+    needsFollowUp: needsFollowUp,
+    STATUSES: STATUSES
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 `;
