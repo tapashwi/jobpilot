@@ -49,7 +49,10 @@ const MODULES = [
   'packages/prep/src/followup.js',
   'packages/autofill/src/fieldmap.js',
   'packages/autofill/src/answers.js',
-  'packages/autofill/src/runner.js'
+  'packages/autofill/src/runner.js',
+  'packages/discovery/src/sources.js',
+  'packages/discovery/src/harvest.js',
+  'packages/discovery/src/campaign.js'
 ];
 const body = MODULES.map((m) => `  // ---- ${m}\n${strip(read(m))}`).join('\n');
 
@@ -120,7 +123,18 @@ ${body}
     STANDARD_ANSWERS: STANDARD,
     lookupFreeText: lookupFreeText,
     rememberAnswer: remember,
-    MODES: MODES
+    MODES: MODES,
+    // discovery
+    searchSources: search,
+    fetchSource: fetchSource,
+    keylessSources: keylessSources,
+    missingCredentials: missingCredentials,
+    harvest: harvest,
+    supportedBoards: supportedBoards,
+    runCampaign: run,
+    enrichJob: enrich,
+    applicationEmail: applicationEmail,
+    emailDraft: emailDraft
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 `;

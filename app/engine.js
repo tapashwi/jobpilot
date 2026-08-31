@@ -46,6 +46,16 @@
     "safe": [
       "scaled agile framework",
       "pi planning"
+    ],
+    "dart": [
+      "dart lang",
+      "dart sdk",
+      "flutter"
+    ],
+    "sap": [
+      "sap erp",
+      "s/4hana",
+      "sap hana"
     ]
   },
   "kubernetes": [
@@ -583,7 +593,6 @@
     "text mining"
   ],
   "computer vision": [
-    "cv",
     "opencv",
     "image recognition"
   ],
@@ -3587,6 +3596,770 @@ function runBatch(profile, jobs, options) {
 }
 
 
+  // ---- packages/discovery/src/sources.js
+/**
+ * sources.js — find the vacancies, from everywhere that will actually give
+ * them to us.
+ *
+ * WHAT IS AND IS NOT POSSIBLE, MEASURED RATHER THAN ASSUMED
+ *
+ * Probed live on 2026-08-29. This matters because most write-ups on the
+ * subject are years stale and cite APIs that no longer exist.
+ *
+ *   KEYLESS, WORKING RIGHT NOW
+ *     Greenhouse  boards-api.greenhouse.io/v1/boards/{company}/jobs
+ *                 574 jobs for one company, no key, no rate limit hit.
+ *                 Thousands of employers use Greenhouse, so a list of company
+ *                 slugs IS a job board.
+ *     Lever       api.lever.co/v0/postings/{company}?mode=json
+ *                 Same idea. 404s on a wrong slug, which is how you validate.
+ *     Arbeitnow   arbeitnow.com/api/job-board-api — 175 jobs, Europe/remote.
+ *     RemoteOK    remoteok.com/api
+ *     Remotive    remotive.com/api/remote-jobs
+ *
+ *   WITH A FREE KEY THE USER SUPPLIES
+ *     Adzuna, Jooble — aggregators covering many countries, including the
+ *     Australian market.
+ *
+ *   NO PUBLIC API AT ALL
+ *     SEEK, Indeed, LinkedIn. Indeed withdrew its public job-search API and
+ *     LinkedIn's is partner-only. There is no key to apply for as an
+ *     individual.
+ *
+ * That last group is most of the Australian market, so pretending otherwise
+ * would make this useless. They are handled a different way — see harvest.js —
+ * by reading the search results page the user is already logged into and
+ * looking at. The extension does not log in, does not solve anything, and does
+ * not fetch pages the user has not opened; it reads what is on screen.
+ *
+ * EVERY SOURCE NORMALISES TO ONE SHAPE, so the gate, the matcher and the
+ * applier do not care where a job came from.
+ */
+
+/** The one job shape. Everything downstream depends only on this. */
+function normalised(fields) {
+  return {
+    id: fields.id || null,
+    title: fields.title || null,
+    company: fields.company || null,
+    location: fields.location || null,
+    remote: fields.remote === undefined ? null : !!fields.remote,
+    url: fields.url || null,
+    adText: fields.adText || '',
+    salaryMin: fields.salaryMin === undefined ? null : fields.salaryMin,
+    salaryMax: fields.salaryMax === undefined ? null : fields.salaryMax,
+    postedAt: fields.postedAt || null,
+    source: fields.source,
+    // How the application is actually made. This decides which machinery runs.
+    applyVia: fields.applyVia || 'web',
+    applyEmail: fields.applyEmail || null
+  };
+}
+
+function stripHtml(html) {
+  return String(html || '')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<\/(p|div|li|h[1-6]|br)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"')
+    .replace(/[ \t]+/g, ' ')
+    // An inline tag removed from mid-sentence leaves a space before the
+    // punctuation that followed it: "<b>Kubernetes</b>." becomes
+    // "Kubernetes ." Cosmetic in isolation, and this text is what the matcher
+    // and the cover letter quote from, so it ends up in the output.
+    .replace(/\s+([.,;:!?)])/g, '$1')
+    .replace(/([(])\s+/g, '$1')
+    .split('\n').map((l) => l.trim()).join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/* ------------------------------------------------------------- adapters */
+
+const ADAPTERS = {
+  /**
+   * Greenhouse. Per-company rather than a search, which is a feature: these
+   * are the employer's own postings, first-hand, with no aggregator lag and
+   * no duplicate reposts.
+   */
+  greenhouse: {
+    label: 'Greenhouse',
+    keyless: true,
+    perCompany: true,
+    url: (company) => `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(company)}/jobs?content=true`,
+    parse: (body, company) => (body.jobs || []).map((j) => normalised({
+      id: `greenhouse:${company}:${j.id}`,
+      title: j.title,
+      company,
+      location: j.location && j.location.name,
+      url: j.absolute_url,
+      adText: stripHtml(j.content),
+      postedAt: j.updated_at,
+      source: 'greenhouse'
+    }))
+  },
+
+  lever: {
+    label: 'Lever',
+    keyless: true,
+    perCompany: true,
+    url: (company) => `https://api.lever.co/v0/postings/${encodeURIComponent(company)}?mode=json`,
+    parse: (body, company) => (Array.isArray(body) ? body : []).map((j) => normalised({
+      id: `lever:${company}:${j.id}`,
+      title: j.text,
+      company,
+      location: j.categories && j.categories.location,
+      url: j.hostedUrl || j.applyUrl,
+      adText: stripHtml(j.descriptionPlain || j.description),
+      remote: /remote/i.test((j.categories && j.categories.location) || ''),
+      postedAt: j.createdAt ? new Date(j.createdAt).toISOString() : null,
+      source: 'lever'
+    }))
+  },
+
+  arbeitnow: {
+    label: 'Arbeitnow',
+    keyless: true,
+    url: () => 'https://www.arbeitnow.com/api/job-board-api',
+    parse: (body) => (body.data || []).map((j) => normalised({
+      id: `arbeitnow:${j.slug}`,
+      title: j.title,
+      company: j.company_name,
+      location: j.location,
+      remote: j.remote,
+      url: j.url,
+      adText: stripHtml(j.description),
+      postedAt: j.created_at ? new Date(j.created_at * 1000).toISOString() : null,
+      source: 'arbeitnow'
+    }))
+  },
+
+  remoteok: {
+    label: 'RemoteOK',
+    keyless: true,
+    url: () => 'https://remoteok.com/api',
+    // The first element is a licence notice, not a job. Slicing blindly would
+    // put "API Terms of Service" in the queue as a vacancy.
+    parse: (body) => (Array.isArray(body) ? body : []).filter((j) => j && j.id && j.position)
+      .map((j) => normalised({
+        id: `remoteok:${j.id}`,
+        title: j.position,
+        company: j.company,
+        location: j.location || 'Remote',
+        remote: true,
+        url: j.url,
+        adText: stripHtml(j.description),
+        salaryMin: j.salary_min || null,
+        salaryMax: j.salary_max || null,
+        postedAt: j.date,
+        source: 'remoteok'
+      }))
+  },
+
+  remotive: {
+    label: 'Remotive',
+    keyless: true,
+    url: (_c, q) => `https://remotive.com/api/remote-jobs${q ? `?search=${encodeURIComponent(q)}` : ''}`,
+    parse: (body) => (body.jobs || []).map((j) => normalised({
+      id: `remotive:${j.id}`,
+      title: j.title,
+      company: j.company_name,
+      location: j.candidate_required_location,
+      remote: true,
+      url: j.url,
+      adText: stripHtml(j.description),
+      postedAt: j.publication_date,
+      source: 'remotive'
+    }))
+  },
+
+  /** Needs a free key from developer.adzuna.com. Covers Australia. */
+  adzuna: {
+    label: 'Adzuna',
+    keyless: false,
+    needs: ['appId', 'appKey'],
+    url: (_c, q, opts) => {
+      const o = opts || {};
+      const country = o.country || 'au';
+      const params = new URLSearchParams({
+        app_id: o.appId || '', app_key: o.appKey || '',
+        results_per_page: String(o.limit || 50),
+        'content-type': 'application/json'
+      });
+      if (q) params.set('what', q);
+      if (o.where) params.set('where', o.where);
+      if (o.salaryMin) params.set('salary_min', String(o.salaryMin));
+      return `https://api.adzuna.com/v1/api/jobs/${country}/search/1?${params}`;
+    },
+    parse: (body) => (body.results || []).map((j) => normalised({
+      id: `adzuna:${j.id}`,
+      title: j.title,
+      company: j.company && j.company.display_name,
+      location: j.location && j.location.display_name,
+      url: j.redirect_url,
+      adText: stripHtml(j.description),
+      salaryMin: j.salary_min || null,
+      salaryMax: j.salary_max || null,
+      postedAt: j.created,
+      source: 'adzuna'
+    }))
+  },
+
+  jooble: {
+    label: 'Jooble',
+    keyless: false,
+    needs: ['apiKey'],
+    method: 'POST',
+    url: (_c, _q, opts) => `https://jooble.org/api/${(opts && opts.apiKey) || ''}`,
+    body: (q, opts) => ({ keywords: q || '', location: (opts && opts.where) || '' }),
+    parse: (body) => (body.jobs || []).map((j) => normalised({
+      id: `jooble:${j.id || j.link}`,
+      title: j.title,
+      company: j.company,
+      location: j.location,
+      url: j.link,
+      adText: stripHtml(j.snippet),
+      postedAt: j.updated,
+      source: 'jooble'
+    }))
+  }
+};
+
+/** Sources usable right now with nothing configured. */
+function keylessSources() {
+  return Object.keys(ADAPTERS).filter((k) => ADAPTERS[k].keyless);
+}
+
+/** What a source still needs before it can run. */
+function missingCredentials(source, opts) {
+  const a = ADAPTERS[source];
+  if (!a) throw new Error('Unknown source: ' + source);
+  if (a.keyless) return [];
+  return (a.needs || []).filter((n) => !(opts && opts[n]));
+}
+
+/**
+ * Fetch one source. `fetchImpl` is injected so this is testable without a
+ * network and usable from both a browser and Node.
+ */
+async function fetchSource(source, options) {
+  const o = options || {};
+  const a = ADAPTERS[source];
+  if (!a) throw new Error('Unknown source: ' + source);
+
+  const missing = missingCredentials(source, o);
+  if (missing.length) {
+    return { source, ok: false, jobs: [], error: `needs ${missing.join(' and ')}`, needsCredentials: missing };
+  }
+  if (a.perCompany && !o.company) {
+    return { source, ok: false, jobs: [],
+      error: `${a.label} is per-employer — give it a company slug (its board is at ${a.label.toLowerCase()}.io/{company})` };
+  }
+
+  const doFetch = o.fetchImpl || (typeof fetch !== 'undefined' ? fetch : null);
+  if (!doFetch) return { source, ok: false, jobs: [], error: 'no fetch available in this environment' };
+
+  const url = a.url(o.company, o.query, o);
+  try {
+    const init = a.method === 'POST'
+      ? { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(a.body(o.query, o)) }
+      : { headers: { accept: 'application/json' } };
+    const res = await doFetch(url, init);
+    if (!res.ok) {
+      return { source, ok: false, jobs: [],
+        error: res.status === 404 && a.perCompany
+          ? `no ${a.label} board for "${o.company}" — the slug is wrong, or they use a different ATS`
+          : `HTTP ${res.status}` };
+    }
+    const body = await res.json();
+    return { source, ok: true, jobs: a.parse(body, o.company), error: null };
+  } catch (e) {
+    return { source, ok: false, jobs: [], error: String((e && e.message) || e) };
+  }
+}
+
+/**
+ * Fetch several sources and merge.
+ *
+ * Deduped on employer plus title, because the same role genuinely does appear
+ * on an aggregator and on the employer's own board — and the employer's own
+ * posting is the better one to apply through, so it wins.
+ */
+const SOURCE_RANK = { greenhouse: 0, lever: 0, adzuna: 2, jooble: 2, arbeitnow: 3, remotive: 3, remoteok: 3 };
+
+async function search(sources, options) {
+  const results = [];
+  for (const s of sources || []) {
+    const spec = typeof s === 'string' ? { source: s } : s;
+    results.push(await fetchSource(spec.source, { ...(options || {}), ...spec }));
+  }
+
+  const byKey = new Map();
+  const norm = (x) => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  for (const r of results) {
+    for (const job of r.jobs) {
+      const key = `${norm(job.company)}::${norm(job.title)}`;
+      const held = byKey.get(key);
+      if (!held || (SOURCE_RANK[job.source] ?? 9) < (SOURCE_RANK[held.source] ?? 9)) byKey.set(key, job);
+    }
+  }
+
+  return {
+    jobs: [...byKey.values()],
+    sources: results.map((r) => ({ source: r.source, ok: r.ok, count: r.jobs.length, error: r.error })),
+    duplicatesMerged: results.reduce((n, r) => n + r.jobs.length, 0) - byKey.size
+  };
+}
+
+
+  // ---- packages/discovery/src/harvest.js
+/**
+ * harvest.js — read job listings off a search-results page the user is
+ * already looking at.
+ *
+ * WHY THIS EXISTS AT ALL
+ *
+ * SEEK, Indeed and LinkedIn have no public job-search API. Indeed withdrew
+ * its public one and LinkedIn's is partner-only; there is nothing an
+ * individual can apply for. Between them that is most of the Australian
+ * market, so a tool that only handled the API-having boards would miss the
+ * jobs the user actually wants.
+ *
+ * So these are read from the page. The extension does not log in, does not
+ * defeat anything, and does not fetch pages the user has not opened — it
+ * reads the results already rendered in front of them, the same list they can
+ * see, and turns it into a queue.
+ *
+ * MATCHED ON URL SHAPE, NOT ON CSS CLASSES.
+ *
+ * Every scraper written against class names dies at the next redeploy, and
+ * these sites ship obfuscated, generated class names specifically because of
+ * that. A job URL, by contrast, is a permalink: seek.com.au/job/12345678 has
+ * had that shape for years, because changing it would break every inbound
+ * link and every bookmark. Anchors are found by URL pattern and the
+ * surrounding element is then read for context, which degrades to "a link and
+ * a title" rather than to nothing.
+ */
+
+/**
+ * Per-board URL patterns and how to pull an id out.
+ *
+ * `card` is the ancestor most likely to hold the title, employer and
+ * location. It is a hint, not a requirement.
+ */
+const BOARDS = [
+  {
+    id: 'seek',
+    label: 'SEEK',
+    host: /(^|\.)seek\.com\.au$/i,
+    jobUrl: /\/job\/(\d+)/,
+    idFrom: (m) => m[1],
+    cardSelector: 'article, [data-card-type], [data-testid*="job"], li'
+  },
+  {
+    id: 'indeed',
+    label: 'Indeed',
+    host: /(^|\.)indeed\.(com|com\.au|co\.uk)$/i,
+    // Both the modern viewjob link and the older redirect carry jk=.
+    jobUrl: /[?&]jk=([a-z0-9]+)/i,
+    idFrom: (m) => m[1],
+    cardSelector: '.job_seen_beacon, [data-jk], td.resultContent, li'
+  },
+  {
+    id: 'linkedin',
+    label: 'LinkedIn',
+    host: /(^|\.)linkedin\.com$/i,
+    jobUrl: /\/jobs\/view\/(?:[^/?#]*-)?(\d+)/,
+    idFrom: (m) => m[1],
+    cardSelector: '.job-card-container, [data-job-id], li'
+  },
+  {
+    id: 'greenhouse',
+    label: 'Greenhouse',
+    host: /greenhouse\.io$/i,
+    jobUrl: /\/jobs\/(\d+)/,
+    idFrom: (m) => m[1],
+    cardSelector: '.opening, li'
+  },
+  {
+    id: 'lever',
+    label: 'Lever',
+    host: /lever\.co$/i,
+    jobUrl: /jobs\.lever\.co\/[^/]+\/([0-9a-f-]{8,})/i,
+    idFrom: (m) => m[1],
+    cardSelector: '.posting, li'
+  }
+];
+
+function boardFor(url) {
+  let host;
+  try { host = new URL(url).hostname; } catch (e) { return null; }
+  return BOARDS.find((b) => b.host.test(host)) || null;
+}
+
+function clean(s) {
+  return String(s || '').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * The card's text as separate pieces, one per leaf element.
+ *
+ * Anything with element children is skipped, because its textContent is the
+ * concatenation of its descendants — which is the blob this exists to avoid.
+ */
+function cardSegments(card) {
+  if (!card) return [];
+  const out = [];
+  const leaves = card.querySelectorAll ? card.querySelectorAll('*') : [];
+  for (const el of leaves) {
+    if (el.children && el.children.length) continue;
+    const t = clean(el.textContent);
+    if (t) out.push(t);
+  }
+  // Direct text nodes of the card itself, which belong to no element.
+  for (const n of card.childNodes || []) {
+    if (n.nodeType === 3) {
+      const t = clean(n.textContent);
+      if (t) out.push(t);
+    }
+  }
+  return out;
+}
+
+/**
+ * Pull the fields out of a card's text.
+ *
+ * Deliberately conservative. A wrong employer name on a queued job leads to a
+ * cover letter addressed to the wrong company, so a field that cannot be read
+ * confidently is left null for the job page itself to supply later.
+ */
+function readCard(segments, title) {
+  // SEGMENTS, not one blob of text. Element.textContent concatenates sibling
+  // elements with no separator at all, so a card rendering
+  // <span>Canva</span><span>Sydney NSW</span><span>$140,000</span>
+  // arrives as "CanvaSydney NSW$140,000" and every field parsed out of it is
+  // wrong. A wrong employer name is not cosmetic — it addresses the cover
+  // letter to the wrong company — so the caller passes the leaf elements'
+  // text separately and this never sees a blob.
+  const lines = (Array.isArray(segments) ? segments : String(segments || '').split('\n'))
+    .map(clean).filter(Boolean);
+  const t = clean(title);
+  // Substring containment is too aggressive: it drops "Austin TX" when the
+  // title happens to be "X", and would drop "Engineering Services Pty Ltd"
+  // for a role called "Engineer". Only an exact match, or a segment that
+  // opens with a title long enough to be distinctive, counts as the title
+  // repeated.
+  const withoutTitle = lines.filter(
+    (l) => l && l !== t && !(t.length >= 6 && l.indexOf(t) === 0)
+  );
+  const cardText = lines.join('\n');
+
+  // Salary, if the card advertises one.
+  const salary = (() => {
+    const m = String(cardText || '').match(/\$\s?([\d,]{4,})(?:\s*(?:-|–|to)\s*\$?\s?([\d,]{4,}))?/);
+    if (!m) return { min: null, max: null };
+    const n = (x) => (x ? Number(String(x).replace(/,/g, '')) : null);
+    return { min: n(m[1]), max: n(m[2]) };
+  })();
+
+  // A salary range contains a comma ("$140,000 - $170,000"), so a comma alone
+  // is not evidence of a place — the first version happily reported the pay
+  // band as the location. Money-shaped segments are excluded first.
+  const looksLikeMoney = (l) => /\$|\bper\s+(hour|day|week|annum|year)\b|\bp\.?a\.?\b|\bsalary\b/i.test(l);
+  // Australian and US listings routinely write "Sydney NSW" or "Austin TX"
+  // with no comma at all, so a comma cannot be the only signal — that missed
+  // the most common local format.
+  const REGION = /\b(NSW|VIC|QLD|WA|SA|TAS|ACT|NT|AL|AK|AZ|CA|CO|CT|FL|GA|IL|MA|MI|NY|NC|OH|OR|PA|TX|VA|WA)\b/;
+  const looksLikePlace = (l) =>
+    /,/.test(l) || /\bremote\b|\bhybrid\b|\bon-?site\b/i.test(l) || REGION.test(l);
+  const location = withoutTitle.find(
+    (l) => !looksLikeMoney(l) && looksLikePlace(l) && l.length < 60
+  ) || null;
+  return {
+    // The employer is the first segment that is not the title, not the
+    // location and not a salary.
+    company: withoutTitle.find((l) => l !== location && !looksLikeMoney(l) && l.length < 60) || null,
+    location: location,
+    salaryMin: salary.min,
+    salaryMax: salary.max,
+    remote: /\bremote\b/i.test(cardText || '') ? true : null
+  };
+}
+
+/**
+ * Harvest from a DOM.
+ *
+ * `doc` is injected so this runs under a test as readily as in a page.
+ */
+function harvest(doc, pageUrl) {
+  const board = boardFor(pageUrl);
+  if (!board) {
+    return { board: null, jobs: [], error: 'This is not a job board JobPilot knows how to read.' };
+  }
+
+  const anchors = [...doc.querySelectorAll('a[href]')];
+  const byId = new Map();
+
+  for (const a of anchors) {
+    const href = a.getAttribute('href') || '';
+    let abs = href;
+    try { abs = new URL(href, pageUrl).toString(); } catch (e) { /* keep as written */ }
+
+    const m = abs.match(board.jobUrl);
+    if (!m) continue;
+    const id = board.idFrom(m);
+    if (!id) continue;
+
+    const title = clean(a.getAttribute('aria-label') || a.textContent);
+    // An anchor with no text is usually an image wrapper around the same job;
+    // the titled one for this id will be found in the same pass.
+    if (!title || title.length < 3) continue;
+
+    const card = (a.closest && a.closest(board.cardSelector)) || a.parentElement;
+    const fields = readCard(cardSegments(card), title);
+
+    const existing = byId.get(id);
+    // Prefer the entry with the most context: several anchors point at the
+    // same job and only one of them sits inside the full card.
+    const score = (fields.company ? 1 : 0) + (fields.location ? 1 : 0) + (fields.salaryMin ? 1 : 0);
+    if (existing && existing._score >= score) continue;
+
+    byId.set(id, {
+      id: `${board.id}:${id}`,
+      title,
+      company: fields.company,
+      location: fields.location,
+      remote: fields.remote,
+      salaryMin: fields.salaryMin,
+      salaryMax: fields.salaryMax,
+      url: abs.split('#')[0],
+      adText: '',
+      source: board.id,
+      applyVia: 'web',
+      applyEmail: null,
+      _score: score
+    });
+  }
+
+  const jobs = [...byId.values()].map((j) => { const { _score, ...rest } = j; return rest; });
+  return {
+    board: board.id,
+    boardLabel: board.label,
+    jobs,
+    error: jobs.length ? null
+      : 'No job links found on this page. Open the search results themselves rather than the ' +
+        'landing page, and scroll far enough for the listings to load.'
+  };
+}
+
+/** Which boards can be harvested, for telling the user where to go. */
+function supportedBoards() {
+  return BOARDS.map((b) => ({ id: b.id, label: b.label }));
+}
+
+
+  // ---- packages/discovery/src/campaign.js
+/**
+ * campaign.js — one search across many boards, gated, ranked, queued.
+ *
+ * This is the piece that makes the rest a machine rather than a set of tools.
+ * A campaign is: what you are looking for, where to look, and what to do with
+ * what comes back.
+ *
+ *   discover  →  gate  →  rank  →  queue  →  (the extension applies)
+ *
+ * THE ORDER IS THE PRODUCT. Every complaint about automated appliers is that
+ * they apply first and filter never. Here the gate runs on every job before
+ * anything is queued, so a run that finds four hundred vacancies and queues
+ * eleven has done its job — the eleven are the ones worth an application.
+ *
+ * Nothing here touches a browser or sends anything. It produces a plan, and
+ * the plan is inspectable before a single application is made.
+ */
+
+
+
+
+
+/**
+ * An email address advertised as the way to apply.
+ *
+ * Deliberately narrow. A job ad contains addresses that are not application
+ * addresses — a privacy officer, a general enquiries line — and mailing those
+ * an application is both useless and rude. An address only counts when the
+ * surrounding words say to send an application to it.
+ */
+const APPLY_CONTEXT = /(appl(y|ications?)|send|forward|email|resume|cv|expressions? of interest|eoi)/i;
+const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
+const NOT_APPLY = /(privacy|unsubscribe|noreply|no-reply|donotreply|abuse|legal|webmaster|postmaster)/i;
+
+function applicationEmail(adText) {
+  const text = String(adText || '');
+  const found = [];
+  let m;
+  EMAIL_RE.lastIndex = 0;
+  while ((m = EMAIL_RE.exec(text)) !== null) {
+    const address = m[0];
+    if (NOT_APPLY.test(address)) continue;
+    // The sentence around it has to be about applying.
+    const from = Math.max(0, m.index - 140);
+    const context = text.slice(from, m.index + address.length + 60);
+    if (!APPLY_CONTEXT.test(context)) continue;
+    found.push({ address, context: context.replace(/\s+/g, ' ').trim() });
+  }
+  return found[0] || null;
+}
+
+/**
+ * Turn a discovered job into something the gate can judge.
+ *
+ * The board listing rarely states the requirements — those are in the ad body
+ * — so the skills are parsed out of whatever text came with it.
+ */
+function enrich(job) {
+  const skills = parseJobSkills(job.adText || '');
+  const email = applicationEmail(job.adText);
+  const years = (() => {
+    const m = String(job.adText || '').match(/(\d+)\s*\+?\s*(?:-|–|to)?\s*\d*\s*years?(?:['’]|\s+of)?\s+experience/i);
+    return m ? Number(m[1]) : null;
+  })();
+
+  return {
+    ...job,
+    requiredSkills: skills.required,
+    preferredSkills: skills.preferred,
+    minYearsExperience: years,
+    applyVia: email ? 'email' : 'web',
+    applyEmail: email ? email.address : null,
+    applyEmailContext: email ? email.context : null
+  };
+}
+
+/**
+ * Run a campaign.
+ *
+ * `already` is the set of jobKeys applied to previously, so a campaign run
+ * daily does not re-queue yesterday's applications.
+ */
+async function run(profile, config, options) {
+  const c = config || {};
+  const o = options || {};
+  const already = new Set(o.already || []);
+
+  const found = await search(c.sources || [], { ...o, query: c.query, where: c.where, ...c.credentials });
+
+  const seen = new Set(already);
+  const queued = [];
+  const rejected = [];
+  let duplicates = 0;
+
+  for (const raw of found.jobs) {
+    const job = enrich(raw);
+    const key = jobKey(job);
+
+    if (seen.has(key)) { duplicates += 1; continue; }
+    seen.add(key);
+
+    // Keyword filter first, if the campaign narrows by title. Cheaper than
+    // the gate and it is what the user asked for.
+    if (c.titleMustMatch && !new RegExp(c.titleMustMatch, 'i').test(job.title || '')) {
+      rejected.push({ job, reason: `title does not match /${c.titleMustMatch}/` });
+      continue;
+    }
+    if (c.excludeTitle && new RegExp(c.excludeTitle, 'i').test(job.title || '')) {
+      rejected.push({ job, reason: `title matches the exclusion /${c.excludeTitle}/` });
+      continue;
+    }
+
+    const assessment = assess(profile, job);
+    if (!assessment.passed) {
+      rejected.push({ job, key, assessment, reason: assessment.blockers.map((b) => b.reason).join('; ') });
+      continue;
+    }
+    queued.push({ job, key, assessment });
+  }
+
+  // Best fit first, so a capped run spends its applications on the best jobs.
+  const order = new Map(rank(queued.map((q) => q.assessment)).map((a, i) => [a, i]));
+  queued.sort((a, b) => order.get(a.assessment) - order.get(b.assessment));
+
+  const capped = c.dailyCap ? queued.slice(0, c.dailyCap) : queued;
+  const deferred = c.dailyCap ? queued.slice(c.dailyCap) : [];
+
+  return {
+    queue: capped,
+    deferred,
+    rejected,
+    sources: found.sources,
+    summary: {
+      discovered: found.jobs.length,
+      duplicatesAcrossSources: found.duplicatesMerged,
+      alreadyApplied: duplicates,
+      rejected: rejected.length,
+      queued: capped.length,
+      deferredByCap: deferred.length,
+      byEmail: capped.filter((q) => q.job.applyVia === 'email').length,
+      byWeb: capped.filter((q) => q.job.applyVia === 'web').length
+    },
+    // The number that actually matters, said plainly.
+    advice: capped.length
+      ? `${found.jobs.length} vacancies found, ${capped.length} worth applying to. The other ` +
+        `${rejected.length} failed a stated requirement — they are listed with the reason, not hidden.`
+      : found.jobs.length
+        ? `${found.jobs.length} vacancies found and none cleared your gates. Widen the search, or ` +
+          'look at the rejection reasons — if they are all the same requirement, that is the thing to fix.'
+        : 'No vacancies came back. Check the sources reported below; a per-employer board needs a ' +
+          'company slug and an aggregator needs its key.'
+  };
+}
+
+/**
+ * The email application for one queued job.
+ *
+ * Returns a draft. It does NOT send: sending on someone's behalf needs their
+ * mail credentials, and a tool that can silently mail hundreds of employers is
+ * a spam cannon whatever its intent. The draft goes to their mail client, from
+ * their own address, and they press send — which is also what makes the reply
+ * land in their inbox rather than nowhere.
+ */
+function emailDraft(profile, job, coverLetterText) {
+  if (!job.applyEmail) return null;
+  const p = profile || {};
+  const subject = `Application — ${job.title || 'your advertised role'}` +
+    (p.name ? ` — ${p.name}` : '');
+
+  const body = [
+    'Hello,',
+    '',
+    `I am applying for the ${job.title || 'advertised role'}` +
+      (job.company ? ` at ${job.company}` : '') + '.',
+    '',
+    coverLetterText || '[paste your cover letter here]',
+    '',
+    'My resume is attached.',
+    '',
+    'Regards,',
+    p.name || '[your name]',
+    [p.email, p.phone].filter(Boolean).join('  •  ')
+  ].join('\n');
+
+  return {
+    to: job.applyEmail,
+    subject,
+    body,
+    // Opening the user's own mail client, so the message is genuinely from
+    // them and the attachment is added by them.
+    mailto: `mailto:${encodeURIComponent(job.applyEmail)}` +
+      `?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
+    reminder: 'Attach your resume before sending — a mailto link cannot carry an attachment, ' +
+      'and an application email without one is deleted unread.',
+    foundBecause: job.applyEmailContext
+  };
+}
+
+
 
   root.JobPilot = {
     // matching
@@ -3641,6 +4414,17 @@ function runBatch(profile, jobs, options) {
     STANDARD_ANSWERS: STANDARD,
     lookupFreeText: lookupFreeText,
     rememberAnswer: remember,
-    MODES: MODES
+    MODES: MODES,
+    // discovery
+    searchSources: search,
+    fetchSource: fetchSource,
+    keylessSources: keylessSources,
+    missingCredentials: missingCredentials,
+    harvest: harvest,
+    supportedBoards: supportedBoards,
+    runCampaign: run,
+    enrichJob: enrich,
+    applicationEmail: applicationEmail,
+    emailDraft: emailDraft
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

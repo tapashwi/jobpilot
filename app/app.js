@@ -557,6 +557,107 @@
 
   renderAnswerFields();
 
+
+  /* ------------------------------------------------------------ find jobs */
+
+  var lastCampaign = null;
+
+  $('#runFind').addEventListener('click', function () {
+    if (needResume('#findOut')) return;
+    var btn = this;
+    var sources = [];
+    $('#fCompanies').value.split(',').map(function (s) { return s.trim(); }).filter(Boolean)
+      .forEach(function (c) {
+        sources.push({ source: 'greenhouse', company: c });
+        sources.push({ source: 'lever', company: c });
+      });
+    if ($('#fRemote').checked) {
+      sources.push({ source: 'arbeitnow' }, { source: 'remoteok' },
+        { source: 'remotive', query: $('#fQuery').value.trim() || undefined });
+    }
+    if (!sources.length) {
+      $('#findOut').innerHTML = '<div class="verdict block"><h2>Nowhere to look</h2>' +
+        '<p>Name at least one company board, or tick the remote boards.</p></div>';
+      return;
+    }
+
+    btn.disabled = true; btn.textContent = 'Searching…';
+    $('#findOut').innerHTML = '<div class="card"><p class="note">Querying ' + sources.length +
+      ' source' + (sources.length === 1 ? '' : 's') + '…</p></div>';
+
+    JP.runCampaign(profile(), {
+      sources: sources,
+      query: $('#fQuery').value.trim() || undefined,
+      titleMustMatch: $('#fTitleMatch').value.trim() || undefined,
+      excludeTitle: $('#fExclude').value.trim() || undefined,
+      dailyCap: num('#fCap') || undefined
+    }).then(function (r) {
+      lastCampaign = r;
+      btn.disabled = false; btn.textContent = 'Search and gate';
+      var s = r.summary;
+
+      var html = '<div class="stats">' +
+        '<div class="stat"><b>' + s.discovered + '</b><span>vacancies found</span></div>' +
+        '<div class="stat"><b>' + s.queued + '</b><span>worth applying to</span></div>' +
+        '<div class="stat"><b>' + s.rejected + '</b><span>failed a requirement</span></div>' +
+        '<div class="stat"><b>' + s.byEmail + '</b><span>apply by email</span></div>' +
+        '<div class="stat"><b>' + s.duplicatesAcrossSources + '</b><span>duplicates merged</span></div></div>';
+
+      html += '<div class="verdict ' + (s.queued ? 'pass' : 'warn') + '"><h2>' +
+        s.queued + ' of ' + s.discovered + ' are worth an application</h2><p>' + esc(r.advice) + '</p></div>';
+
+      html += '<div class="card"><h3 style="margin-top:0">Where they came from</h3><ul class="src">' +
+        r.sources.map(function (x) {
+          return '<li><strong>' + esc(x.source) + '</strong> — ' +
+            (x.ok ? x.count + ' jobs' : 'failed: ' + esc(x.error)) + '</li>';
+        }).join('') + '</ul></div>';
+
+      if (r.queue.length) {
+        html += '<div class="card"><h3 style="margin-top:0">The queue, best fit first</h3>' +
+          r.queue.map(function (q) {
+            return '<div class="qrow ready"><div><h4>' +
+              esc(q.job.title || 'Untitled') + (q.job.company ? ' — ' + esc(q.job.company) : '') +
+              '</h4><div class="meta">' +
+              (q.job.location ? esc(q.job.location) + ' · ' : '') +
+              'fit ' + (q.assessment.score === null ? '—' : q.assessment.score) + '/100 · ' +
+              (q.job.applyVia === 'email' ? 'apply by email to ' + esc(q.job.applyEmail) : 'apply on the web') +
+              '</div></div><div><a class="chip have" href="' + esc(q.job.url) + '" target="_blank" rel="noopener">Open</a></div></div>';
+          }).join('') + '</div>';
+      }
+
+      if (r.rejected.length) {
+        html += '<div class="card"><h3 style="margin-top:0">Not queued, and why</h3>' +
+          '<p class="note">Listed rather than hidden — if they all fail on the same requirement, ' +
+          'that is the thing to fix.</p><ul class="blockers">' +
+          r.rejected.slice(0, 25).map(function (x) {
+            return '<li><strong>' + esc(x.job.title || 'Untitled') +
+              (x.job.company ? ' — ' + esc(x.job.company) : '') +
+              '</strong><span>' + esc(x.reason) + '</span></li>';
+          }).join('') +
+          (r.rejected.length > 25 ? '<li><span>… and ' + (r.rejected.length - 25) + ' more</span></li>' : '') +
+          '</ul></div>';
+      }
+
+      $('#findOut').innerHTML = html;
+    }).catch(function (e) {
+      btn.disabled = false; btn.textContent = 'Search and gate';
+      $('#findOut').innerHTML = '<div class="verdict block"><h2>The search failed</h2><p>' +
+        esc(String(e && e.message ? e.message : e)) + '</p></div>';
+    });
+  });
+
+  $('#exportQueue2').addEventListener('click', function () {
+    if (!lastCampaign) return;
+    copyText(JSON.stringify({
+      generatedAt: new Date().toISOString(),
+      summary: lastCampaign.summary,
+      queue: lastCampaign.queue.map(function (q) {
+        return { title: q.job.title, company: q.job.company, url: q.job.url,
+          applyVia: q.job.applyVia, applyEmail: q.job.applyEmail, score: q.assessment.score };
+      })
+    }, null, 2), this);
+  });
+
   /* ------------------------------------------------------------------- boot */
 
   $('#saveProfile').addEventListener('click', saveProfile);

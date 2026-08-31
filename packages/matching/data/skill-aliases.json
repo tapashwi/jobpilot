@@ -36,6 +36,16 @@
     "safe": [
       "scaled agile framework",
       "pi planning"
+    ],
+    "dart": [
+      "dart lang",
+      "dart sdk",
+      "flutter"
+    ],
+    "sap": [
+      "sap erp",
+      "s/4hana",
+      "sap hana"
     ]
   },
   "kubernetes": [
@@ -573,7 +583,6 @@
     "text mining"
   ],
   "computer vision": [
-    "cv",
     "opencv",
     "image recognition"
   ],

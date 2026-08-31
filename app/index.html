@@ -256,6 +256,7 @@
     <button role="tab" id="t-interview" aria-controls="p-interview" aria-selected="false">Interview prep</button>
     <button role="tab" id="t-followup" aria-controls="p-followup" aria-selected="false">Follow up</button>
     <button role="tab" id="t-answers"  aria-controls="p-answers"  aria-selected="false">Screening answers</button>
+    <button role="tab" id="t-find"     aria-controls="p-find"     aria-selected="false">Find jobs</button>
   </nav>
 </div></header>
 
@@ -452,6 +453,36 @@
       </div>
     </div>
     <div id="answersOut"></div>
+  </section>
+
+  <section role="tabpanel" id="p-find" aria-labelledby="t-find" hidden>
+    <div class="card">
+      <h3 style="margin-top:0">Search every board that will let us</h3>
+      <p class="note">Probed live: <strong>Greenhouse, Lever, Arbeitnow, RemoteOK and Remotive</strong>
+         all answer with no API key at all. Greenhouse and Lever are per-employer — their board for
+         one company is a real endpoint, and a list of companies is a job board. <strong>SEEK,
+         Indeed and LinkedIn have no public API</strong>; Indeed withdrew theirs and LinkedIn's is
+         partner-only. Those come from the browser extension reading the search results you are
+         already logged in and looking at.</p>
+      <div class="row">
+        <div><label for="fQuery">What you are looking for</label>
+             <input type="text" id="fQuery" placeholder="platform engineer" /></div>
+        <div><label for="fCompanies">Company boards (comma separated)</label>
+             <input type="text" id="fCompanies" placeholder="stripe, airtable, databricks" /></div>
+      </div>
+      <div class="row">
+        <div><label for="fTitleMatch">Title must match</label>
+             <input type="text" id="fTitleMatch" placeholder="engineer|developer|sre" /></div>
+        <div><label for="fExclude">Exclude titles matching</label>
+             <input type="text" id="fExclude" placeholder="intern|graduate|principal" /></div>
+        <div><label for="fCap">Daily cap</label>
+             <input type="number" id="fCap" min="1" step="1" placeholder="20" /></div>
+      </div>
+      <label class="check"><input type="checkbox" id="fRemote" checked /> Include the remote-only boards</label>
+      <div class="actions"><button id="runFind">Search and gate</button>
+        <button class="ghost" id="exportQueue2">Export the queue</button></div>
+    </div>
+    <div id="findOut"></div>
   </section>
 
 </main>
