@@ -2,4 +2,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://jobpilot-ay8.pages.dev/sitemap.xml
+Sitemap: https://jobpilot.tapaswibaskota.com.np/sitemap.xml
