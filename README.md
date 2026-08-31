@@ -5,15 +5,20 @@ No AI at runtime, no subscription, no account.
 
 ## It is live
 
-**https://jobpilot-ay8.pages.dev** — deployed 2026-08-26, Cloudflare Pages
-project `jobpilot`. Static, three files, nothing server-side. Your resume text
-never leaves the browser; there is no backend to send it to.
+**https://jobpilot.tapaswibaskota.com.np** — Cloudflare Pages project
+`jobpilot`. Static, nothing server-side. Your resume text never leaves the
+browser; there is no backend to send it to.
+
+It moved off `jobpilot-ay8.pages.dev` on 2026-08-31 because `pages.dev` is on
+the Public Suffix List, so AdSense verifies at the `pages.dev` level and can
+never approve a site there. The old address still serves, and the canonical
+points here.
 
 Redeploy after any change:
 
 ```bash
 node scripts/build-engine.js
-npx wrangler pages deploy app --project-name jobpilot --branch main
+cd app && npx wrangler pages deploy . --project-name jobpilot --branch main
 ```
 
 ## Where this came from
