@@ -117,6 +117,34 @@ So, in order:
 5. **Every field is recorded** with its value and where the value came from, so
    a wrong answer is findable on job one instead of job forty.
 
+### Setting it up
+
+Load `extension/` unpacked from `chrome://extensions`, then open its
+**Options** page. Paste the JSON from the app's *Copy for the extension*
+button, or fill the fields in directly. **Nothing works until this is done** —
+and the extension says so rather than silently applying to everything: an empty
+profile means the gate has nothing to judge and every job passes.
+
+### Running a queue
+
+The orchestrator walks the queue tab by tab: open, read the posting, gate it,
+fill, submit or leave for review, close, pause, next. It reads the
+advertisement **off each job's own page** — via schema.org JobPosting
+structured data, which is a contract with Google Jobs and so survives the
+redesigns that break every CSS selector — because the queue entry has a title
+and an employer but not the requirements, and the gate needs the requirements.
+
+A page whose body did not load is reported as unreadable rather than applied
+to: too little text means the requirement extraction finds nothing, an empty
+required-skills list makes the gate pass, and the application goes out unread.
+Three unreadable pages in a row stops the run, because that is an expired login
+or a site change rather than three unlucky jobs.
+
+The run survives the service worker being killed — Manifest V3 collects it
+after about thirty seconds idle and a run of forty jobs lasts far longer, so
+every step is a pure function of stored state and the pacing goes through
+`chrome.alarms` rather than `setTimeout`, which does not survive.
+
 Three modes, and the popup explains each where you choose it:
 
 | Mode | What happens |

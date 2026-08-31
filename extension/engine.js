@@ -3596,6 +3596,208 @@ function runBatch(profile, jobs, options) {
 }
 
 
+  // ---- packages/autofill/src/orchestrator.js
+/**
+ * orchestrator.js — walk a queue of jobs, applying to each.
+ *
+ * This is the join that was missing: the campaign produced a queue and the
+ * content script applied to whatever page you happened to be on, but nothing
+ * connected them. Without this, everything else is a set of tools rather than
+ * a machine.
+ *
+ * WHY THE STATE MACHINE IS PURE, AND SEPARATE FROM THE EXTENSION
+ *
+ * Manifest V3 kills a service worker after roughly thirty seconds idle, and a
+ * run walking forty jobs takes far longer than that. So the run cannot live in
+ * memory: every transition is a pure function from stored state to the next
+ * stored state, and the worker can die between any two steps and resume
+ * exactly where it left off. That also makes the sequencing testable without a
+ * browser, which is the only way to check the resumption behaviour at all.
+ *
+ * WHAT IT REFUSES TO DO
+ *
+ * - It will not start without a profile. An empty profile means the gate has
+ *   nothing to judge and every job passes; a run in that state would apply to
+ *   everything indiscriminately, which is the exact behaviour this project
+ *   exists to avoid.
+ * - It will not run unattended without a complete answer bank, for the same
+ *   reason: unanswered screening questions become guesses at scale.
+ * - It paces itself. Applications fired as fast as tabs can open are both
+ *   obvious to bot detection and useless to a human trying to watch what is
+ *   happening.
+ */
+
+
+const RUN_STATES = ['idle', 'running', 'paused', 'stopped', 'finished'];
+
+/** Deliberately unhurried. Faster is not better here — it is just more obvious. */
+const DEFAULT_DELAY_MS = 8000;
+const DEFAULT_CAP = 25;
+
+/**
+ * Can a run start at all?
+ *
+ * Returns the reasons it cannot, rather than a bare false — "you cannot start"
+ * with no explanation is the least useful message a tool can give.
+ */
+function preflight(profile, answers, queue, options) {
+  const o = options || {};
+  const problems = [];
+
+  const p = profile || {};
+  const hasIdentity = !!(p.name || p.firstName) && !!p.email;
+  if (!hasIdentity) {
+    problems.push({
+      code: 'no-profile',
+      message: 'No profile. Fill in at least your name and email in the extension options — ' +
+        'without them nothing can be filled in, and without the rest of the profile the gate ' +
+        'has nothing to judge, so every job would pass.'
+    });
+  }
+  if (!p.resumeText || p.resumeText.length < 200) {
+    problems.push({
+      code: 'no-resume',
+      message: 'No resume text. The skills gate compares the advertisement against your resume; ' +
+        'with an empty resume you match nothing and every job is reported as a skills failure.'
+    });
+  }
+
+  if (o.mode === 'auto') {
+    const r = readiness(answers);
+    if (!r.ready) {
+      problems.push({
+        code: 'answers-incomplete',
+        message: 'Unattended mode needs the screening answers filled in first. ' + r.advice
+      });
+    }
+  }
+
+  if (!queue || !queue.length) {
+    problems.push({ code: 'empty-queue', message: 'Nothing in the queue. Run a search first.' });
+  }
+
+  return { ok: problems.length === 0, problems };
+}
+
+/** The initial stored state for a run. Everything the machine needs is here. */
+function startRun(queue, options) {
+  const o = options || {};
+  const cap = Math.max(1, o.cap || DEFAULT_CAP);
+  return {
+    state: 'running',
+    mode: o.mode || 'review',
+    queue: (queue || []).slice(0, cap).map((q) => ({
+      url: q.url || (q.job && q.job.url),
+      title: (q.job && q.job.title) || q.title || null,
+      company: (q.job && q.job.company) || q.company || null,
+      key: q.key || null,
+      status: 'pending'
+    })),
+    index: 0,
+    delayMs: o.delayMs === undefined ? DEFAULT_DELAY_MS : o.delayMs,
+    startedAt: o.now || new Date().toISOString(),
+    results: [],
+    stopReason: null
+  };
+}
+
+/** The job the machine should act on next, or null when there is none. */
+function current(run) {
+  if (!run || run.state !== 'running') return null;
+  return run.queue[run.index] || null;
+}
+
+/**
+ * Record what happened to the current job and advance.
+ *
+ * `outcome` is whatever the content script reported. Nothing is interpreted
+ * here beyond deciding whether to keep going.
+ */
+function recordAndAdvance(run, outcome, options) {
+  const o = options || {};
+  const next = { ...run, queue: run.queue.slice(), results: run.results.slice() };
+  const entry = next.queue[next.index];
+
+  if (entry) {
+    next.queue[next.index] = { ...entry, status: outcome.outcome || 'unknown' };
+    next.results.push({
+      url: entry.url,
+      title: entry.title,
+      company: entry.company,
+      outcome: outcome.outcome || 'unknown',
+      submitted: !!outcome.submitted,
+      why: outcome.why || null,
+      blockers: (outcome.blockers || []).filter((b) => b.blocking !== false).map((b) => b.label),
+      at: o.now || new Date().toISOString()
+    });
+  }
+
+  next.index += 1;
+
+  /**
+   * A run that fails on job after job is not working, and continuing wastes
+   * applications. Three consecutive failures to even read the page means
+   * something systemic — logged out, a layout change, a network problem — and
+   * stopping is the right answer.
+   */
+  const recent = next.results.slice(-3);
+  const allUnreadable = recent.length === 3 && recent.every((r) => r.outcome === 'unreadable');
+  if (allUnreadable) {
+    next.state = 'stopped';
+    next.stopReason =
+      'Three jobs in a row could not be read. That is usually a login that has expired or a site ' +
+      'change, not three unlucky pages — stopping rather than burning through the queue.';
+    return next;
+  }
+
+  if (next.index >= next.queue.length) {
+    next.state = 'finished';
+    next.stopReason = null;
+  }
+  return next;
+}
+
+function pause(run, reason) {
+  return { ...run, state: 'paused', stopReason: reason || null };
+}
+
+function resume(run) {
+  if (!run || run.state !== 'paused') return run;
+  return { ...run, state: 'running', stopReason: null };
+}
+
+function stop(run, reason) {
+  return { ...run, state: 'stopped', stopReason: reason || 'Stopped by you.' };
+}
+
+/** A human-readable account of where a run got to. */
+function summarise(run) {
+  if (!run) return { state: 'idle', done: 0, total: 0 };
+  const by = (k) => run.results.filter((r) => r.outcome === k).length;
+  const submitted = run.results.filter((r) => r.submitted).length;
+  return {
+    state: run.state,
+    mode: run.mode,
+    done: run.results.length,
+    total: run.queue.length,
+    remaining: Math.max(0, run.queue.length - run.index),
+    submitted,
+    filledForReview: by('filled-for-review'),
+    blocked: by('blocked'),
+    duplicates: by('duplicate'),
+    needsHuman: by('needs-human') + by('unreadable'),
+    stopReason: run.stopReason,
+    advice: run.state === 'finished'
+      ? `${run.results.length} jobs processed. ${submitted} submitted, ` +
+        `${by('filled-for-review')} filled and waiting for you, ${by('blocked')} skipped because ` +
+        'you did not meet a stated requirement.'
+      : run.state === 'stopped'
+        ? run.stopReason
+        : `${run.index} of ${run.queue.length} done.`
+  };
+}
+
+
   // ---- packages/discovery/src/sources.js
 /**
  * sources.js — find the vacancies, from everywhere that will actually give
@@ -4360,6 +4562,272 @@ function emailDraft(profile, job, coverLetterText) {
 }
 
 
+  // ---- packages/discovery/src/jobpage.js
+/**
+ * jobpage.js — read one job posting off its own page.
+ *
+ * WHY THIS EXISTS
+ *
+ * The gate is the whole safety story, and the gate needs a job: a title, an
+ * employer, the required skills, the experience floor, the salary. Without
+ * those, assess() judges an empty object and passes everything — the guarantee
+ * is inert. The extension was in exactly that state: it sent `job: {}`.
+ *
+ * THE STRATEGY, IN ORDER OF DURABILITY
+ *
+ * 1. JSON-LD. Almost every job board emits schema.org JobPosting structured
+ *    data, because Google Jobs requires it to index them. That makes it the
+ *    most stable thing on the page by a wide margin — it is a contract with
+ *    Google, not an implementation detail, so it survives redesigns that break
+ *    every CSS selector. It is also already normalised: title, hiringOrganization,
+ *    baseSalary, employmentType, datePosted.
+ *
+ * 2. Open Graph and standard meta tags. Also maintained for external
+ *    consumers, also stable.
+ *
+ * 3. Heuristics over the visible DOM. Last, because it is the part that breaks.
+ *
+ * Each strategy fills only the fields the previous ones left empty, and every
+ * field records which strategy produced it — so when something is wrong, it is
+ * obvious where it came from.
+ */
+
+/** Everything the gate and the applier need from a posting. */
+/**
+ * How much ad body counts as having actually read the advertisement.
+ *
+ * Not arbitrary, and it is load-bearing. The requirement extraction — skills,
+ * years, salary — all runs on this text, and when there is too little of it
+ * the extraction finds nothing. An empty requiredSkills list makes the skills
+ * gate PASS, so a page whose body never loaded sails through and gets applied
+ * to unread. That is the precise failure this whole tool is built against.
+ *
+ * An og:description is capped near 160 characters by convention, so a page
+ * offering only meta tags will sit under this — correctly. It has given us a
+ * title and an employer, not the requirements.
+ */
+const MIN_AD_TEXT = 400;
+
+function emptyJob() {
+  return {
+    title: null, company: null, location: null, adText: '',
+    salaryMin: null, salaryMax: null, employmentType: null,
+    postedAt: null, url: null, remote: null,
+    minYearsExperience: null,
+    requiredSkills: [], preferredSkills: [],
+    _from: {}
+  };
+}
+
+function text(s) {
+  return String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+}
+
+/** schema.org allows a string, an object, or an array almost everywhere. */
+function firstOf(v) {
+  if (Array.isArray(v)) return v.length ? firstOf(v[0]) : null;
+  return v === undefined ? null : v;
+}
+
+function nameOf(v) {
+  const x = firstOf(v);
+  if (!x) return null;
+  if (typeof x === 'string') return text(x);
+  if (typeof x === 'object') return text(x.name || x.legalName || null) || null;
+  return null;
+}
+
+/** Walk a JSON-LD payload, which may be a graph, an array, or a bare object. */
+function collectPostings(node, out) {
+  out = out || [];
+  if (!node || typeof node !== 'object') return out;
+  if (Array.isArray(node)) {
+    for (const n of node) collectPostings(n, out);
+    return out;
+  }
+  const type = node['@type'];
+  const types = Array.isArray(type) ? type : [type];
+  if (types.indexOf('JobPosting') !== -1) out.push(node);
+  if (node['@graph']) collectPostings(node['@graph'], out);
+  return out;
+}
+
+function fromJsonLd(doc, job) {
+  const scripts = [...doc.querySelectorAll('script[type="application/ld+json"]')];
+  for (const s of scripts) {
+    let parsed;
+    try { parsed = JSON.parse(s.textContent); } catch (e) { continue; }
+    for (const p of collectPostings(parsed)) {
+      const set = (field, value) => {
+        if (job[field] === null || job[field] === '' ) {
+          if (value !== null && value !== undefined && value !== '') {
+            job[field] = value;
+            job._from[field] = 'json-ld';
+          }
+        }
+      };
+
+      set('title', text(p.title) || null);
+      set('company', nameOf(p.hiringOrganization));
+
+      const loc = firstOf(p.jobLocation);
+      if (loc) {
+        const addr = (loc.address && firstOf(loc.address)) || loc;
+        const parts = [addr.addressLocality, addr.addressRegion, addr.addressCountry]
+          .map((x) => nameOf(x)).filter(Boolean);
+        set('location', parts.join(', ') || nameOf(loc.name));
+      }
+      if (p.jobLocationType && /telecommute/i.test(String(p.jobLocationType))) {
+        if (job.remote === null) { job.remote = true; job._from.remote = 'json-ld'; }
+      }
+
+      const sal = firstOf(p.baseSalary);
+      if (sal) {
+        const v = firstOf(sal.value) || sal;
+        const min = Number(v.minValue !== undefined ? v.minValue : v.value);
+        const max = Number(v.maxValue !== undefined ? v.maxValue : v.value);
+        // schema.org allows hourly and monthly; a gate comparing an hourly
+        // rate against an annual minimum would block every job on earth.
+        const unit = String(v.unitText || '').toUpperCase();
+        const annualise = unit === 'HOUR' ? 1900 : unit === 'DAY' ? 240
+          : unit === 'WEEK' ? 52 : unit === 'MONTH' ? 12 : 1;
+        if (Number.isFinite(min) && min > 0) set('salaryMin', Math.round(min * annualise));
+        if (Number.isFinite(max) && max > 0) set('salaryMax', Math.round(max * annualise));
+      }
+
+      set('employmentType', nameOf(p.employmentType));
+      set('postedAt', text(p.datePosted) || null);
+
+      if (!job.adText && p.description) {
+        // description is HTML in practice, despite the spec calling it text.
+        job.adText = text(String(p.description).replace(/<[^>]+>/g, ' '));
+        job._from.adText = 'json-ld';
+      }
+    }
+  }
+  return job;
+}
+
+function metaContent(doc, selectors) {
+  for (const sel of selectors) {
+    const el = doc.querySelector(sel);
+    const v = el && (el.getAttribute('content') || el.getAttribute('value'));
+    if (v && text(v)) return text(v);
+  }
+  return null;
+}
+
+function fromMeta(doc, job) {
+  const set = (field, value, how) => {
+    if ((job[field] === null || job[field] === '') && value) {
+      job[field] = value;
+      job._from[field] = how;
+    }
+  };
+  set('title', metaContent(doc, ['meta[property="og:title"]', 'meta[name="twitter:title"]']), 'og');
+  set('company', metaContent(doc, ['meta[property="og:site_name"]']), 'og');
+  if (!job.adText) {
+    const d = metaContent(doc, ['meta[property="og:description"]', 'meta[name="description"]']);
+    if (d) { job.adText = d; job._from.adText = 'og'; }
+  }
+  return job;
+}
+
+/**
+ * Visible-DOM heuristics. Last resort, and the only part expected to rot.
+ *
+ * The ad body is taken as the largest block of text on the page, which is a
+ * crude rule that holds well: a job page's biggest text block is the job
+ * description, because that is what the page is for.
+ */
+function fromDom(doc, job) {
+  if (!job.title) {
+    const h1 = doc.querySelector('h1');
+    if (h1 && text(h1.textContent)) {
+      job.title = text(h1.textContent);
+      job._from.title = 'h1';
+    }
+  }
+
+  if (!job.adText || job.adText.length < 200) {
+    let best = null;
+    const candidates = doc.querySelectorAll(
+      'article, [class*="description"], [class*="Description"], [data-automation*="description"], main, section, div'
+    );
+    for (const el of candidates) {
+      // Skip containers whose text is mostly their children's chrome.
+      const t = text(el.textContent);
+      if (t.length < 300) continue;
+      if (!best || t.length > best.length) best = t;
+    }
+    if (best && best.length > (job.adText || '').length) {
+      job.adText = best;
+      job._from.adText = 'largest-text-block';
+    }
+  }
+  return job;
+}
+
+/**
+ * Read the posting.
+ *
+ * `parseSkills` is injected rather than imported so this module stays free of
+ * the matcher — the caller supplies it, and tests can check the extraction
+ * without pulling the dictionary in.
+ */
+function readJobPage(doc, pageUrl, parseSkills) {
+  const job = emptyJob();
+  job.url = pageUrl || null;
+
+  fromJsonLd(doc, job);
+  fromMeta(doc, job);
+  fromDom(doc, job);
+
+  if (job.adText) {
+    if (job.remote === null && /\bremote\b|\bwork from home\b/i.test(job.adText)) job.remote = true;
+
+    const m = job.adText.match(/(\d+)\s*\+?\s*(?:-|–|to)?\s*\d*\s*years?(?:['’]|\s+of)?\s+experience/i);
+    if (m && job.minYearsExperience == null) {
+      job.minYearsExperience = Number(m[1]);
+      job._from.minYearsExperience = 'ad-text';
+    }
+
+    if (job.salaryMin === null) {
+      const s = job.adText.match(/\$\s?([\d,]{4,})\s*(?:-|–|to)\s*\$?\s?([\d,]{4,})/);
+      if (s) {
+        const n = (x) => Number(String(x).replace(/,/g, ''));
+        job.salaryMin = n(s[1]);
+        job.salaryMax = n(s[2]);
+        job._from.salaryMin = 'ad-text';
+      }
+    }
+
+    if (parseSkills) {
+      const sk = parseSkills(job.adText);
+      job.requiredSkills = sk.required;
+      job.preferredSkills = sk.preferred;
+      job._from.skills = 'ad-text';
+    }
+  }
+
+  // What is missing matters as much as what was found: the gate cannot judge
+  // a requirement that was never read, and pretending otherwise is how a tool
+  // "passes" every job.
+  job.missing = ['title', 'company', 'adText'].filter((f) => !job[f]);
+  if (!job.missing.length && job.adText.length < MIN_AD_TEXT) job.missing.push('adText (too short)');
+
+  job.usable = job.missing.length === 0;
+  job.whyUnusable = job.usable ? null
+    : job.adText && job.adText.length < MIN_AD_TEXT
+      ? `Only ${job.adText.length} characters of advertisement were readable, which is not enough ` +
+        'to have read the requirements. The body probably did not load, or the posting is behind ' +
+        'a login. Applying now would mean applying unread.'
+      : `Could not read: ${job.missing.join(', ')}. This may not be a job page, or it needs a login.`;
+
+  return job;
+}
+
+
 
   root.JobPilot = {
     // matching
@@ -4425,6 +4893,16 @@ function emailDraft(profile, job, coverLetterText) {
     runCampaign: run,
     enrichJob: enrich,
     applicationEmail: applicationEmail,
-    emailDraft: emailDraft
+    emailDraft: emailDraft,
+    readJobPage: readJobPage,
+    // orchestration
+    preflight: preflight,
+    startRun: startRun,
+    current: current,
+    recordAndAdvance: recordAndAdvance,
+    pauseRun: pause,
+    resumeRun: resume,
+    stop: stop,
+    summarise: summarise
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

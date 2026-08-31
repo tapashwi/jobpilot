@@ -1,0 +1,91 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>JobPilot — your details</title>
+<style>
+  :root { --ink:#0f172a; --soft:#52607a; --line:#e2e5ec; --accent:#4338ca;
+          --ok:#047857; --ok-bg:#d6f5e8; --warn:#92400e; --warn-bg:#fdf0d5;
+          --bad:#b91c1c; --bad-bg:#fdeaea; --panel:#fff; --bg:#f7f8fa; }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#e8ecf5; --soft:#9aa8c0; --line:#2a3550; --accent:#a5b4fc;
+            --ok:#4ade80; --ok-bg:#0f3527; --warn:#fbbf24; --warn-bg:#3a2c0d;
+            --bad:#fca5a5; --bad-bg:#3a1414; --panel:#131a2e; --bg:#0b1020; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:2rem 1.25rem 5rem; background:var(--bg); color:var(--ink);
+         font:15px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:760px; margin:0 auto; }
+  h1 { margin:0 0 .3rem; font-size:1.5rem; }
+  .sub { margin:0 0 1.5rem; color:var(--soft); }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:14px;
+          padding:1.1rem 1.2rem; margin-bottom:1rem; }
+  h2 { margin:0 0 .5rem; font-size:1.05rem; }
+  label { display:block; font-weight:650; font-size:.88rem; margin:.9rem 0 .3rem; }
+  input, textarea, select { width:100%; padding:.6rem .7rem; font:inherit; font-size:.92rem;
+    background:var(--panel); color:inherit; border:1px solid var(--line); border-radius:9px; }
+  textarea { min-height:150px; resize:vertical; }
+  textarea.code { font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:.85rem; min-height:170px; }
+  .row { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:.7rem; }
+  button { min-height:44px; padding:.55rem 1.1rem; font:inherit; font-weight:650; cursor:pointer;
+           background:var(--accent); color:#fff; border:0; border-radius:10px; margin-top:1rem; }
+  @media (prefers-color-scheme: dark) { button { color:#0b1020; } }
+  button.ghost { background:transparent; color:inherit; border:1px solid var(--line); }
+  .note { font-size:.87rem; color:var(--soft); }
+  .status { padding:.75rem .9rem; border-radius:10px; margin-top:1rem; font-size:.9rem; }
+  .status.ok { background:var(--ok-bg); border:1px solid var(--ok); }
+  .status.warn { background:var(--warn-bg); border:1px solid var(--warn); }
+  .status.bad { background:var(--bad-bg); border:1px solid var(--bad); }
+  ul { margin:.4rem 0 0; padding-left:1.1rem; font-size:.88rem; }
+  a { color:var(--accent); }
+</style>
+
+<div class="wrap">
+  <h1>Your details</h1>
+  <p class="sub">Stored in this browser only. Nothing is uploaded, and the extension cannot
+     fill anything or gate anything until this is set.</p>
+
+  <div class="card">
+    <h2>Paste from the app</h2>
+    <p class="note">The quickest way. Open
+       <a href="https://jobpilot-ay8.pages.dev/" target="_blank" rel="noopener">the JobPilot app</a>,
+       fill in your profile and screening answers, press <strong>Copy for the extension</strong>,
+       and paste it here.</p>
+    <label for="blob">The JSON from the app</label>
+    <textarea id="blob" class="code" placeholder='{ "profile": { … }, "answers": { … } }'></textarea>
+    <button id="importBlob">Import</button>
+    <button class="ghost" id="clearAll">Clear everything</button>
+  </div>
+
+  <div class="card">
+    <h2>Or fill it in here</h2>
+    <div class="row">
+      <div><label for="name">Full name</label><input id="name" type="text" placeholder="Jane Doe"></div>
+      <div><label for="email">Email</label><input id="email" type="text" placeholder="jane@example.com"></div>
+      <div><label for="phone">Phone</label><input id="phone" type="text" placeholder="+61 400 000 000"></div>
+    </div>
+    <div class="row">
+      <div><label for="city">City</label><input id="city" type="text" placeholder="Adelaide"></div>
+      <div><label for="country">Country</label><input id="country" type="text" placeholder="Australia"></div>
+      <div><label for="linkedin">LinkedIn</label><input id="linkedin" type="text" placeholder="linkedin.com/in/janedoe"></div>
+    </div>
+    <div class="row">
+      <div><label for="years">Years of experience</label><input id="years" type="number" min="0" step="0.5"></div>
+      <div><label for="minsal">Minimum salary</label><input id="minsal" type="number" min="0" step="1000"></div>
+    </div>
+    <label for="resume">Your resume, as text</label>
+    <textarea id="resume" placeholder="Paste your resume — the gate compares it against each advertisement"></textarea>
+    <button id="saveProfile">Save profile</button>
+  </div>
+
+  <div class="card">
+    <h2>Screening answers</h2>
+    <p class="note">The answers that decide whether you get read. Anything left blank makes a run
+       <strong>stop</strong> on that job rather than guess — which is the whole point.</p>
+    <div id="answers"></div>
+    <button id="saveAnswers">Save answers</button>
+  </div>
+
+  <div id="status"></div>
+</div>
+
+<script src="engine.js"></script>
+<script src="options.js"></script>

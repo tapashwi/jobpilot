@@ -1,9 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "JobPilot — gated auto-apply",
+  "name": "JobPilot \u2014 gated auto-apply",
   "version": "0.2.0",
   "description": "Fills and submits job applications, but only for jobs you actually qualify for, and never guesses a screening answer.",
-  "permissions": ["storage", "activeTab", "scripting"],
+  "permissions": [
+    "activeTab",
+    "alarms",
+    "scripting",
+    "storage",
+    "tabs"
+  ],
   "host_permissions": [
     "https://*.seek.com.au/*",
     "https://*.myworkdayjobs.com/*",
@@ -16,8 +22,13 @@
     "https://*.pageuppeople.com/*",
     "https://www.linkedin.com/jobs/*"
   ],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_popup": "popup.html", "default_title": "JobPilot" },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "JobPilot"
+  },
   "content_scripts": [
     {
       "matches": [
@@ -32,9 +43,16 @@
         "https://*.pageuppeople.com/*",
         "https://www.linkedin.com/jobs/*"
       ],
-      "js": ["engine.js", "content.js"],
+      "js": [
+        "engine.js",
+        "content.js"
+      ],
       "run_at": "document_idle",
       "all_frames": true
     }
-  ]
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  }
 }

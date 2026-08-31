@@ -184,6 +184,11 @@
   if (globalThis.chrome && chrome.runtime && chrome.runtime.onMessage)
   chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
     try {
+      if (msg.type === 'PING') {
+        respond({ ok: true, url: location.href });
+        return true;
+      }
+
       if (msg.type === 'READ_FORM') {
         const { fields } = readForm();
         respond({ ok: true, url: location.href, fields });
@@ -192,7 +197,23 @@
 
       if (msg.type === 'RUN') {
         const { fields, elements } = readForm();
-        const decision = JP.runOne(msg.profile, msg.job, { fields }, {
+
+        // Read the advertisement off the page rather than trusting whatever
+        // the caller passed. The queue entry holds a title and an employer;
+        // the gate needs the requirements, and those are only here. An empty
+        // job makes assess() pass everything, which is how a gated applier
+        // quietly stops being gated.
+        const job = msg.job && msg.job.adText
+          ? msg.job
+          : JP.readJobPage(document, location.href, JP.parseJobSkills);
+
+        if (job.usable === false) {
+          respond({ ok: true, submitted: false, executed: [],
+            decision: { outcome: 'unreadable', why: job.whyUnusable, plan: [], blockers: [], record: [] } });
+          return true;
+        }
+
+        const decision = JP.runOne(msg.profile, job, { fields }, {
           mode: msg.mode, answers: msg.answers, seen: msg.seen
         });
 

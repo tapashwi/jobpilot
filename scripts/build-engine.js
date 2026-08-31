@@ -50,9 +50,11 @@ const MODULES = [
   'packages/autofill/src/fieldmap.js',
   'packages/autofill/src/answers.js',
   'packages/autofill/src/runner.js',
+  'packages/autofill/src/orchestrator.js',
   'packages/discovery/src/sources.js',
   'packages/discovery/src/harvest.js',
-  'packages/discovery/src/campaign.js'
+  'packages/discovery/src/campaign.js',
+  'packages/discovery/src/jobpage.js'
 ];
 const body = MODULES.map((m) => `  // ---- ${m}\n${strip(read(m))}`).join('\n');
 
@@ -134,7 +136,17 @@ ${body}
     runCampaign: run,
     enrichJob: enrich,
     applicationEmail: applicationEmail,
-    emailDraft: emailDraft
+    emailDraft: emailDraft,
+    readJobPage: readJobPage,
+    // orchestration
+    preflight: preflight,
+    startRun: startRun,
+    current: current,
+    recordAndAdvance: recordAndAdvance,
+    pauseRun: pause,
+    resumeRun: resume,
+    stop: stop,
+    summarise: summarise
   };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 `;
