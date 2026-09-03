@@ -15,6 +15,14 @@
 <meta name="twitter:title" content="JobPilot — free, private job application assistant" />
 <meta name="twitter:description" content="Check a job against your resume, find what an ATS will miss, draft a cover letter from your own achievements, and apply in bulk. Nothing is uploaded." />
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"JobPilot","url":"https://jobpilot.tapaswibaskota.com.np/","applicationCategory":"BusinessApplication","operatingSystem":"Any (runs in browser)","offers":{"@type":"Offer","price":"0","priceCurrency":"AUD"},"description":"Privacy-first job application assistant. Matches your resume against a job, checks what an applicant tracking system will miss, drafts tailored cover letters and selection criteria, and applies in bulk. Runs entirely in the browser with no account and no upload.","featureList":["Resume-to-job matching with hard gates","ATS compatibility check","Tailored cover letters built from your own achievements","STAR selection criteria responses","Interview preparation","Bulk application queue"]}</script>
+<!-- Cloudflare Web Analytics: cookieless, sets nothing on the visitor's
+     machine and needs no consent banner, which is the only kind of
+     measurement that belongs on a page selling itself as privacy-first.
+     This token is a public client-side beacon identifier, not a secret — it
+     is meant to be readable in page source — and was created via the
+     Cloudflare API for this hostname specifically rather than reusing another
+     property's, so JobPilot's numbers stay its own. -->
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "b6daaca6b0a1477f97bb2c66acf42b7d"}'></script>
 <style>
   :root {
     --ink:#0f172a; --soft:#52607a; --line:#e2e5ec; --bg:#f7f8fa; --panel:#fff;
@@ -253,8 +261,10 @@
   <h1>JobPilot</h1>
   <p>Match a job against your resume, see what an applicant tracking system will miss, draft a
      cover letter and selection criteria from your own achievements, and work through a queue of
-     applications. Everything runs on this device: nothing is uploaded, there is no account, and
-     no text is sent to a model.</p>
+     applications. Everything runs on this device: your resume and the jobs you paste are never
+     uploaded, there is no account, and no text is sent to a model. The only thing that leaves
+     this page is an anonymous page-view count through Cloudflare Web Analytics, which sets no
+     cookies and cannot identify you.</p>
   <nav class="tabs" role="tablist" aria-label="Sections">
     <button role="tab" id="t-profile"  aria-controls="p-profile"  aria-selected="true">Your profile</button>
     <button role="tab" id="t-match"    aria-controls="p-match"    aria-selected="false">Check one job</button>
