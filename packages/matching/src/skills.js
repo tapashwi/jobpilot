@@ -212,6 +212,58 @@ const PREFERRED_MARKERS = [
   'well regarded', 'not essential', 'beneficial'
 ];
 
+/**
+ * Phrases that introduce a list of ALTERNATIVES rather than a list of demands.
+ *
+ * "You are skilled in one or more of C, Python, Go, Rust, Java, Ruby, PHP or
+ * JavaScript/TypeScript" is ONE requirement with eight ways to satisfy it.
+ * Read naively it becomes eight separate required skills, and a candidate who
+ * writes Python is told they are missing seven things — which is what a real
+ * Canonical draft said, under advice to reconsider applying for a role whose
+ * language requirement was already met.
+ *
+ * That is the worst direction for this tool to be wrong in: it talks someone
+ * out of a job they qualify for, quietly, with a number that looks objective.
+ */
+const ALTERNATIVE_MARKERS = [
+  'one or more of', 'at least one of', 'any of the following', 'any one of',
+  'one of the following', 'such as', 'for example', 'e.g.', 'including but not limited to',
+  'experience in one of', 'proficient in one or more',
+];
+
+/**
+ * The groups of skills an ad offers as alternatives to each other.
+ *
+ * Each group is satisfied by ANY one of its members. Returns canonical names,
+ * so the caller compares like with like.
+ */
+function alternativeGroups(text) {
+  const raw = String(text == null ? '' : text);
+  const lower = raw.toLowerCase();
+  const groups = [];
+
+  for (const marker of ALTERNATIVE_MARKERS) {
+    let from = 0;
+    for (;;) {
+      const at = lower.indexOf(marker, from);
+      if (at === -1) break;
+      from = at + marker.length;
+
+      // The alternatives run to the end of the sentence, and no further — a
+      // following sentence is a separate requirement, not another option.
+      const rest = raw.slice(from, from + 300);
+      const stop = rest.search(/[.;\n]|\bYou (?:have|are|can|will)\b/);
+      const span = stop === -1 ? rest : rest.slice(0, stop);
+
+      const found = extractSkills(span);
+      // Two is the minimum that can be an alternative to anything. A single
+      // skill after "such as" is just an example of itself, still required.
+      if (found.length >= 2) groups.push(found);
+    }
+  }
+  return groups;
+}
+
 function parseJobSkills(text) {
   const raw = String(text == null ? '' : text);
   const lower = raw.toLowerCase();
@@ -223,8 +275,10 @@ function parseJobSkills(text) {
     if (at !== -1 && (cut === -1 || at < cut)) cut = at;
   }
 
+  const alternatives = alternativeGroups(raw);
+
   if (cut === -1) {
-    return { required: extractSkills(raw), preferred: [], splitAt: null };
+    return { required: extractSkills(raw), preferred: [], alternatives, splitAt: null };
   }
 
   // Back up to the start of the sentence carrying the marker, so "KQL a plus"
@@ -239,8 +293,10 @@ function parseJobSkills(text) {
 
   const required = extractSkills(head);
   const preferred = extractSkills(tail).filter((s) => !required.includes(s));
-  return { required, preferred, splitAt: boundary + 1 };
+  return { required, preferred, alternatives, splitAt: boundary + 1 };
 }
 
 module.exports.parseJobSkills = parseJobSkills;
+module.exports.alternativeGroups = alternativeGroups;
+module.exports.ALTERNATIVE_MARKERS = ALTERNATIVE_MARKERS;
 module.exports.PREFERRED_MARKERS = PREFERRED_MARKERS;

@@ -1075,6 +1075,58 @@ const PREFERRED_MARKERS = [
   'well regarded', 'not essential', 'beneficial'
 ];
 
+/**
+ * Phrases that introduce a list of ALTERNATIVES rather than a list of demands.
+ *
+ * "You are skilled in one or more of C, Python, Go, Rust, Java, Ruby, PHP or
+ * JavaScript/TypeScript" is ONE requirement with eight ways to satisfy it.
+ * Read naively it becomes eight separate required skills, and a candidate who
+ * writes Python is told they are missing seven things — which is what a real
+ * Canonical draft said, under advice to reconsider applying for a role whose
+ * language requirement was already met.
+ *
+ * That is the worst direction for this tool to be wrong in: it talks someone
+ * out of a job they qualify for, quietly, with a number that looks objective.
+ */
+const ALTERNATIVE_MARKERS = [
+  'one or more of', 'at least one of', 'any of the following', 'any one of',
+  'one of the following', 'such as', 'for example', 'e.g.', 'including but not limited to',
+  'experience in one of', 'proficient in one or more',
+];
+
+/**
+ * The groups of skills an ad offers as alternatives to each other.
+ *
+ * Each group is satisfied by ANY one of its members. Returns canonical names,
+ * so the caller compares like with like.
+ */
+function alternativeGroups(text) {
+  const raw = String(text == null ? '' : text);
+  const lower = raw.toLowerCase();
+  const groups = [];
+
+  for (const marker of ALTERNATIVE_MARKERS) {
+    let from = 0;
+    for (;;) {
+      const at = lower.indexOf(marker, from);
+      if (at === -1) break;
+      from = at + marker.length;
+
+      // The alternatives run to the end of the sentence, and no further — a
+      // following sentence is a separate requirement, not another option.
+      const rest = raw.slice(from, from + 300);
+      const stop = rest.search(/[.;\n]|\bYou (?:have|are|can|will)\b/);
+      const span = stop === -1 ? rest : rest.slice(0, stop);
+
+      const found = extractSkills(span);
+      // Two is the minimum that can be an alternative to anything. A single
+      // skill after "such as" is just an example of itself, still required.
+      if (found.length >= 2) groups.push(found);
+    }
+  }
+  return groups;
+}
+
 function parseJobSkills(text) {
   const raw = String(text == null ? '' : text);
   const lower = raw.toLowerCase();
@@ -1086,8 +1138,10 @@ function parseJobSkills(text) {
     if (at !== -1 && (cut === -1 || at < cut)) cut = at;
   }
 
+  const alternatives = alternativeGroups(raw);
+
   if (cut === -1) {
-    return { required: extractSkills(raw), preferred: [], splitAt: null };
+    return { required: extractSkills(raw), preferred: [], alternatives, splitAt: null };
   }
 
   // Back up to the start of the sentence carrying the marker, so "KQL a plus"
@@ -1102,8 +1156,10 @@ function parseJobSkills(text) {
 
   const required = extractSkills(head);
   const preferred = extractSkills(tail).filter((s) => !required.includes(s));
-  return { required, preferred, splitAt: boundary + 1 };
+  return { required, preferred, alternatives, splitAt: boundary + 1 };
 }
+
+
 
 
 
@@ -1736,6 +1792,30 @@ const REMOTE_REGION_LOCKS = [
 ];
 
 /**
+ * Country names, which are a restriction ONLY in a location field.
+ *
+ * A Tenable posting reading "Remote — Germany, Italy, Netherlands" passed as
+ * plainly reachable from Darwin: the list above has "europe" and "eu" but no
+ * country *in* Europe, and a posting fenced to three countries names the three
+ * rather than the continent.
+ *
+ * These are kept apart from the list above because they are only safe in the
+ * location field. In ad prose a country name is usually an office list — "our
+ * teams in Germany and Japan" — and treating that as a fence would silently
+ * drop genuinely open remote roles, which is the more expensive error: a false
+ * lock is invisible, whereas a wrongly-included job is obvious on reading it.
+ */
+const LOCATION_ONLY_COUNTRY_LOCKS = [
+  {
+    re: /\b(germany|deutschland|italy|netherlands|nederland|france|spain|portugal|poland|ireland|sweden|norway|denmark|finland|belgium|austria|switzerland|czechia|czech republic|romania|greece|hungary)\b/i,
+    where: 'Europe',
+  },
+  { re: /\b(brazil|mexico|argentina|colombia|chile)\b/i, where: 'Latin America' },
+  { re: /\b(japan|korea|indonesia|vietnam|malaysia|thailand|china)\b/i, where: 'that country' },
+  { re: /\b(south africa|nigeria|kenya|egypt|israel|turkey|uae)\b/i, where: 'that country' },
+];
+
+/**
  * What counts as "open to me" in a LOCATION field: home, or explicitly
  * unrestricted.
  */
@@ -1767,7 +1847,9 @@ function remoteRegionLock(job) {
   const j = job || {};
   const loc = String(j.location || '');
   if (OPEN_LOCATION.test(loc)) return null;
-  const inLocation = REMOTE_REGION_LOCKS.find(({ re }) => re.test(loc));
+  // Country names count here and nowhere else — see LOCATION_ONLY_COUNTRY_LOCKS.
+  const inLocation = REMOTE_REGION_LOCKS.concat(LOCATION_ONLY_COUNTRY_LOCKS)
+    .find(({ re }) => re.test(loc));
   if (inLocation) return inLocation.where;
 
   const head = String(j.adText || '').slice(0, 400);
@@ -2288,7 +2370,29 @@ function coverLetter(profile, job, opts) {
   // here rather than at the sentence, so a skill whose best line is a heading
   // falls through to its next-best line instead of producing a broken one.
   const backed = ev.filter((e) => e.hasEvidence && readsAsAction(e.text));
-  const unbacked = ev.filter((e) => !e.hasEvidence && required.indexOf(e.skill) !== -1);
+  /**
+   * "One or more of C, Python, Go, Rust, Java, Ruby, PHP or JavaScript" is ONE
+   * requirement with eight ways to meet it. Counted individually it produced
+   * "7 required skills have no supporting achievement", on a Canonical role
+   * whose language requirement the resume already satisfied through Python —
+   * under a printed suggestion to reconsider applying.
+   *
+   * So: a member of a group that ANY backed skill satisfies is not a gap at
+   * all. A group nothing satisfies stays a gap, but as one item rather than
+   * eight.
+   */
+  const groups = (j.alternativeSkillGroups || []).map((g) => g.map(canonicalise));
+  const backedSkills = new Set(ev.filter((e) => e.hasEvidence).map((e) => e.skill));
+  const satisfiedGroupMembers = new Set();
+  for (const g of groups) {
+    if (g.some((s) => backedSkills.has(s))) g.forEach((s) => satisfiedGroupMembers.add(s));
+  }
+
+  const unbacked = ev.filter(
+    (e) => !e.hasEvidence
+      && required.indexOf(e.skill) !== -1
+      && !satisfiedGroupMembers.has(e.skill),
+  );
 
   // Lead with quantified evidence for required skills; those are the sentences
   // that answer "can you do the job" rather than "have you heard of it".
@@ -5573,6 +5677,9 @@ function enrich(job) {
     ...job,
     requiredSkills: skills.required,
     preferredSkills: skills.preferred,
+    // Groups the ad offers as alternatives ("one or more of ..."). Any one
+    // member satisfies the whole group - see cover-letter.js.
+    alternativeSkillGroups: skills.alternatives || [],
     minYearsExperience: years,
     applyVia: email ? 'email' : 'web',
     applyEmail: email ? email.address : null,

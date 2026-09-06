@@ -147,7 +147,29 @@ function coverLetter(profile, job, opts) {
   // here rather than at the sentence, so a skill whose best line is a heading
   // falls through to its next-best line instead of producing a broken one.
   const backed = ev.filter((e) => e.hasEvidence && readsAsAction(e.text));
-  const unbacked = ev.filter((e) => !e.hasEvidence && required.indexOf(e.skill) !== -1);
+  /**
+   * "One or more of C, Python, Go, Rust, Java, Ruby, PHP or JavaScript" is ONE
+   * requirement with eight ways to meet it. Counted individually it produced
+   * "7 required skills have no supporting achievement", on a Canonical role
+   * whose language requirement the resume already satisfied through Python —
+   * under a printed suggestion to reconsider applying.
+   *
+   * So: a member of a group that ANY backed skill satisfies is not a gap at
+   * all. A group nothing satisfies stays a gap, but as one item rather than
+   * eight.
+   */
+  const groups = (j.alternativeSkillGroups || []).map((g) => g.map(canonicalise));
+  const backedSkills = new Set(ev.filter((e) => e.hasEvidence).map((e) => e.skill));
+  const satisfiedGroupMembers = new Set();
+  for (const g of groups) {
+    if (g.some((s) => backedSkills.has(s))) g.forEach((s) => satisfiedGroupMembers.add(s));
+  }
+
+  const unbacked = ev.filter(
+    (e) => !e.hasEvidence
+      && required.indexOf(e.skill) !== -1
+      && !satisfiedGroupMembers.has(e.skill),
+  );
 
   // Lead with quantified evidence for required skills; those are the sentences
   // that answer "can you do the job" rather than "have you heard of it".

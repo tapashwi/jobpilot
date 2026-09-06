@@ -239,3 +239,75 @@ describe('a board slug is not a brand name', () => {
     }
   });
 });
+
+describe('"one or more of" is one requirement, not eight', () => {
+  const { parseJobSkills, alternativeGroups } = require('../packages/matching/src/skills');
+  const { coverLetter } = require('../packages/documents/src/cover-letter');
+
+  // The exact sentence from the live Canonical Ubuntu Security Engineer ad.
+  const CANONICAL = 'You are familiar with open source development tools and methodologies. '
+    + 'You are skilled in one or more of C, Python, Go, Rust, Java, Ruby, PHP or JavaScript/TypeScript. '
+    + 'You have excellent problem-solving skills.';
+
+  test('the alternatives are collected as a group', () => {
+    const [group] = alternativeGroups(CANONICAL);
+    expect(group).toEqual(expect.arrayContaining(['python', 'go', 'rust', 'java']));
+    expect(group.length).toBeGreaterThan(4);
+  });
+
+  test('the group stops at the end of its sentence', () => {
+    // The sentence after it is a separate requirement. Running on would sweep
+    // the whole ad into one permissive group and the gate would stop gating.
+    const groups = alternativeGroups('Use one or more of Python or Go. You must know Kubernetes.');
+    expect(groups.flat()).not.toContain('kubernetes');
+  });
+
+  test('a single skill after "such as" is not an alternative to anything', () => {
+    expect(alternativeGroups('A language such as Python.')).toHaveLength(0);
+  });
+
+  test('knowing ONE of them clears the whole requirement', () => {
+    // This is the defect in full: the resume backs Python, and the letter
+    // reported seven missing skills and advised reconsidering a role whose
+    // language requirement was already satisfied. Talking someone out of a job
+    // they qualify for is the worst direction for this tool to be wrong in.
+    const resumeText = '- Built an eight-class speech emotion classifier in Python using a CNN.';
+    const parsed = parseJobSkills(CANONICAL);
+    const letter = coverLetter(
+      { name: 'A', resumeText },
+      {
+        title: 'Ubuntu Security Engineer',
+        company: 'Canonical',
+        adText: CANONICAL,
+        requiredSkills: parsed.required,
+        alternativeSkillGroups: parsed.alternatives,
+      },
+      {},
+    );
+    for (const lang of ['Go', 'Java', 'Ruby', 'PHP', 'Rust', 'TypeScript']) {
+      expect(letter.unbackedRequired).not.toContain(lang.toLowerCase());
+    }
+    expect(letter.text).not.toMatch(/required skills have no supporting achievement/);
+  });
+
+  test('knowing NONE of them is still a gap, reported once', () => {
+    const letter = coverLetter(
+      { name: 'A', resumeText: '- Ran a service desk for three years.' },
+      {
+        title: 'Engineer',
+        company: 'Acme',
+        adText: CANONICAL,
+        requiredSkills: parseJobSkills(CANONICAL).required,
+        alternativeSkillGroups: parseJobSkills(CANONICAL).alternatives,
+      },
+      {},
+    );
+    expect(letter.readiness).not.toBe('complete');
+  });
+
+  test('enrich carries the groups onto the job', () => {
+    const { enrich } = require('../packages/discovery/src/campaign');
+    const job = enrich({ title: 'T', company: 'C', adText: CANONICAL });
+    expect(job.alternativeSkillGroups.length).toBeGreaterThan(0);
+  });
+});

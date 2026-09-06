@@ -68,6 +68,9 @@ function enrich(job) {
     ...job,
     requiredSkills: skills.required,
     preferredSkills: skills.preferred,
+    // Groups the ad offers as alternatives ("one or more of ..."). Any one
+    // member satisfies the whole group - see cover-letter.js.
+    alternativeSkillGroups: skills.alternatives || [],
     minYearsExperience: years,
     applyVia: email ? 'email' : 'web',
     applyEmail: email ? email.address : null,

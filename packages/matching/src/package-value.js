@@ -412,6 +412,30 @@ const REMOTE_REGION_LOCKS = [
 ];
 
 /**
+ * Country names, which are a restriction ONLY in a location field.
+ *
+ * A Tenable posting reading "Remote — Germany, Italy, Netherlands" passed as
+ * plainly reachable from Darwin: the list above has "europe" and "eu" but no
+ * country *in* Europe, and a posting fenced to three countries names the three
+ * rather than the continent.
+ *
+ * These are kept apart from the list above because they are only safe in the
+ * location field. In ad prose a country name is usually an office list — "our
+ * teams in Germany and Japan" — and treating that as a fence would silently
+ * drop genuinely open remote roles, which is the more expensive error: a false
+ * lock is invisible, whereas a wrongly-included job is obvious on reading it.
+ */
+const LOCATION_ONLY_COUNTRY_LOCKS = [
+  {
+    re: /\b(germany|deutschland|italy|netherlands|nederland|france|spain|portugal|poland|ireland|sweden|norway|denmark|finland|belgium|austria|switzerland|czechia|czech republic|romania|greece|hungary)\b/i,
+    where: 'Europe',
+  },
+  { re: /\b(brazil|mexico|argentina|colombia|chile)\b/i, where: 'Latin America' },
+  { re: /\b(japan|korea|indonesia|vietnam|malaysia|thailand|china)\b/i, where: 'that country' },
+  { re: /\b(south africa|nigeria|kenya|egypt|israel|turkey|uae)\b/i, where: 'that country' },
+];
+
+/**
  * What counts as "open to me" in a LOCATION field: home, or explicitly
  * unrestricted.
  */
@@ -443,7 +467,9 @@ function remoteRegionLock(job) {
   const j = job || {};
   const loc = String(j.location || '');
   if (OPEN_LOCATION.test(loc)) return null;
-  const inLocation = REMOTE_REGION_LOCKS.find(({ re }) => re.test(loc));
+  // Country names count here and nowhere else — see LOCATION_ONLY_COUNTRY_LOCKS.
+  const inLocation = REMOTE_REGION_LOCKS.concat(LOCATION_ONLY_COUNTRY_LOCKS)
+    .find(({ re }) => re.test(loc));
   if (inLocation) return inLocation.where;
 
   const head = String(j.adText || '').slice(0, 400);
