@@ -1,1 +1,6 @@
 node_modules/
+
+# Personal profile and salary figures. The CV content is public on the
+# portfolio; the salary is not, and must never be committed.
+profile.local.json
+coverage/
