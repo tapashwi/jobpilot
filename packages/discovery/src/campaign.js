@@ -31,7 +31,35 @@ const { jobKey } = require('../../autofill/src/runner');
  */
 const APPLY_CONTEXT = /(appl(y|ications?)|send|forward|email|resume|cv|expressions? of interest|eoi)/i;
 const EMAIL_RE = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
-const NOT_APPLY = /(privacy|unsubscribe|noreply|no-reply|donotreply|abuse|legal|webmaster|postmaster)/i;
+const NOT_APPLY = /(privacy|unsubscribe|noreply|no-reply|donotreply|abuse|legal|webmaster|postmaster|accommodation|accessibility|adjustment|press|media|investor|vulnerability|whistleblow)/i;
+
+/**
+ * Sentences that mention applying but are NOT telling you where to apply.
+ *
+ * THE IMPORTANT CHECK, and it was found by reading real output rather than by
+ * reasoning. Culture Amp's advertisements carry:
+ *
+ *   "...accommodations or adjustments due to a disability to complete the
+ *    online application or to participate in the interview process, contact
+ *    accommodations@cultureamp.com"
+ *
+ * APPLY_CONTEXT matches on "appl", that sentence contains "application", and
+ * so the address passed every test. Two drafts were headed "SEND VIA email"
+ * pointing at a DISABILITY ACCOMMODATIONS MAILBOX. Sending a job application
+ * there would have gone unread, and would have put it through a channel that
+ * exists for people who need help with access.
+ *
+ * Filtering the address alone cannot fix it — an employer may run that line
+ * from talent@ or people@ — so the surrounding sentence is tested as well, and
+ * an exclusion here beats any match in APPLY_CONTEXT.
+ */
+const NOT_APPLY_CONTEXT = new RegExp([
+  'accommodat', 'adjustment', 'disabilit', 'accessib', 'auslan', 'interpreter',
+  'equal opportunit', 'discriminat', 'harass', 'grievance',
+  'report a (?:vulnerabilit|security|concern)', 'whistleblow',
+  'media enquir', 'press enquir', 'investor relations',
+  'privacy (?:policy|officer|enquir)', 'unsubscrib', 'opt out',
+].join('|'), 'i');
 
 function applicationEmail(adText) {
   const text = String(adText || '');
@@ -44,6 +72,9 @@ function applicationEmail(adText) {
     // The sentence around it has to be about applying.
     const from = Math.max(0, m.index - 140);
     const context = text.slice(from, m.index + address.length + 60);
+    // Exclusion first: a sentence can be about applying AND about something
+    // else entirely, and when it is, the something else wins.
+    if (NOT_APPLY_CONTEXT.test(context)) continue;
     if (!APPLY_CONTEXT.test(context)) continue;
     found.push({ address, context: context.replace(/\s+/g, ' ').trim() });
   }

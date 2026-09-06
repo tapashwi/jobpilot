@@ -311,3 +311,42 @@ describe('"one or more of" is one requirement, not eight', () => {
     expect(job.alternativeSkillGroups.length).toBeGreaterThan(0);
   });
 });
+
+describe('an accommodations mailbox is not an application address', () => {
+  const { applicationEmail } = require('../packages/discovery/src/campaign');
+
+  // Verbatim shape of the sentence in every Culture Amp advertisement.
+  const CULTUREAMP = 'Culture Amp is an equal opportunity employer. If you require '
+    + 'accommodations or adjustments due to a disability to complete the online application '
+    + 'or to participate in the interview process, please contact accommodations@cultureamp.com '
+    + 'and we will be happy to assist.';
+
+  test('the defect: it contains "application", and that used to be enough', () => {
+    // Two real drafts were headed "SEND VIA email" pointing here. Sending a job
+    // application to a disability-support inbox would go unread AND misuse a
+    // channel that exists for people who need help with access.
+    expect(applicationEmail(CULTUREAMP)).toBeNull();
+  });
+
+  test('the context test does the work, not the address name', () => {
+    // An employer may run the same line from a neutrally-named mailbox, so
+    // filtering on the word "accommodations" in the address is not enough.
+    const neutral = 'If you need adjustments due to a disability to complete your '
+      + 'application, email talent@example.com.';
+    expect(applicationEmail(neutral)).toBeNull();
+  });
+
+  test('a genuine application address still comes through', () => {
+    const real = 'To apply, please send your resume and a cover letter to '
+      + 'careers@example.com by 30 September.';
+    expect(applicationEmail(real).address).toBe('careers@example.com');
+  });
+
+  test.each([
+    ['a security disclosure line', 'To report a vulnerability, email security@example.com'],
+    ['a media line', 'For media enquiries contact press@example.com'],
+    ['a privacy officer', 'Our privacy policy is here; the privacy officer is privacy@example.com'],
+  ])('%s is not where you send a CV', (_label, text) => {
+    expect(applicationEmail(text)).toBeNull();
+  });
+});
