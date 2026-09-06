@@ -233,7 +233,13 @@ function coverLetter(profile, job, opts) {
     if (/^Hi\b/i.test(g)) return 'Kind regards,';
     if (/Sir\/Madam/i.test(g)) return 'Yours faithfully,';
     if (j.hiringManager) return 'Yours sincerely,';
-    return tone === 'formal' ? 'Yours sincerely,' : 'Regards,';
+    // "Dear Hiring Manager" names a role, not a person, so it takes YOURS
+    // FAITHFULLY. Sincerely belongs with a name — that is the whole
+    // distinction the block above exists to keep, and this branch used to
+    // break it, handing a formal tone "Yours sincerely" after an unnamed
+    // greeting. Found by adding the option to the web app and reading the
+    // pair it produced.
+    return tone === 'formal' ? 'Yours faithfully,' : 'Regards,';
   };
 
   const signoff = [

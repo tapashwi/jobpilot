@@ -161,10 +161,36 @@
     return html;
   }
 
+  /**
+   * Where the job is, said plainly and before anything else.
+   *
+   * The skills verdict answers "could I do this job" and says nothing at all
+   * about whether you could take it. A Melbourne hybrid role scored as a match
+   * for someone in Darwin, with two days a week in an office 3,000km away
+   * going entirely unmentioned. That is not a detail to leave to the reader —
+   * it is the first thing that decides the application, so it goes first.
+   */
+  function renderPlace(job, homeCity) {
+    if (!job.location) return '';
+    var r = JP.reachability(job, { homeCity: homeCity || null });
+    var cls = r.kind === 'relocation' ? 'warn' : r.kind === 'out-of-country' ? 'block' : 'pass';
+    var head = {
+      local: 'Commutable',
+      remote: 'Remote — reachable from anywhere',
+      relocation: 'A move, not a commute',
+      unstated: 'The ad does not say where you would actually work',
+      'out-of-country': 'Outside Australia'
+    }[r.kind] || 'Location';
+    return '<div class="verdict ' + cls + '"><h2>' + esc(head) + '</h2><p>' + esc(r.note) + '</p></div>';
+  }
+
   $('#go').addEventListener('click', function () {
     if (needResume('#matchOut')) return;
     var job = readJob('#job', '#jreq', '#jyears', '#jmin', '#jmax');
-    $('#matchOut').innerHTML = renderMatch(JP.assess(profile(), job));
+    job.location = $('#jloc').value.trim() || null;
+    job.adText = $('#job').value;
+    $('#matchOut').innerHTML = renderPlace(job, $('#jhome').value.trim()) +
+      renderMatch(JP.assess(profile(), job));
   });
   $('#clearJob').addEventListener('click', function () {
     $('#job').value = ''; $('#matchOut').innerHTML = '';
@@ -218,7 +244,11 @@
       adText: $('#lJob').value,
       requiredSkills: parsed.required,
       preferredSkills: parsed.preferred
-    }, { tone: $('#lTone').value });
+    }, {
+      tone: $('#lTone').value,
+      salutation: $('#lSalutation').value,
+      whyThem: $('#lWhy').value.trim() || null
+    });
 
     lastLetter = r.text;
     var badge = '<span class="readiness' + (r.gaps === 0 ? ' done' : '') + '">' + esc(r.readiness) + '</span>';
@@ -226,6 +256,30 @@
       '<div class="doc">' + withGaps(r.text) + '</div>' +
       '<p class="note" style="margin-top:.8rem">' + r.wordCount + ' words. ' +
       'The highlighted blanks are yours to fill — they are the parts no tool can know.</p></div>';
+
+    // The tell scan. It runs on the finished draft rather than shaping it,
+    // because "this reads like a person wrote it" is the sort of claim that is
+    // easy to assert and turns out to be false — so it is shown as findings
+    // the reader can check, not as a promise in the note above.
+    var found = JP.tells(r.text);
+    var beat = JP.rhythm(r.text);
+    if (found.length) {
+      html += '<div class="verdict warn"><h2>' + found.length +
+        (found.length === 1 ? ' phrase reads' : ' phrases read') + ' as machine-written</h2>' +
+        '<ul class="blockers">' + found.map(function (t) {
+          return '<li><strong>' + esc(t.text) + '</strong><span>' + esc(t.why) + '</span></li>';
+        }).join('') + '</ul>' +
+        '<p>Rewrite each one in your own words. A recruiter reading fifty letters a day ' +
+        'recognises these before finishing the sentence.</p></div>';
+    } else {
+      html += '<div class="verdict pass"><h2>Nothing reads as machine-written</h2>' +
+        '<p>Checked against the cover-letter cliches and the generated-prose tells.' +
+        (beat.sentences >= 3
+          ? ' Sentence length runs ' + beat.min + '–' + beat.max + ' words across ' +
+            beat.sentences + ' sentences.'
+          : '') +
+        '</p></div>';
+    }
 
     if (r.sources.length) {
       html += '<div class="card"><h3 style="margin-top:0">Where each claim came from</h3><ul class="src">' +

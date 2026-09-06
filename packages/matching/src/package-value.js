@@ -45,7 +45,13 @@ const DEFAULTS = {
   marginalRate: 0.32,        // 30% bracket + 2% Medicare levy
 };
 
-const num = (v) => {
+// Named toNumber, not num, because match.js already declares a `num` at the
+// top level and scripts/build-engine.js concatenates every module into ONE
+// shared scope. Two top-level `const num` declarations is a syntax error that
+// takes the whole browser app down on load — the exact failure the build
+// script's header warns about. The build now refuses to emit on a collision,
+// so this comment is a reminder rather than the only defence.
+const toNumber = (v) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 };
@@ -59,8 +65,8 @@ const num = (v) => {
  */
 function packagingGrossEquivalent(opts = {}) {
   const o = { ...DEFAULTS, ...opts };
-  const taxFree = (num(o.packagingCapGeneral) || 0) + (num(o.packagingCapMeals) || 0);
-  const rate = num(o.marginalRate);
+  const taxFree = (toNumber(o.packagingCapGeneral) || 0) + (toNumber(o.packagingCapMeals) || 0);
+  const rate = toNumber(o.marginalRate);
   if (!taxFree) return 0;
   // A marginal rate of 1 or more would divide by zero or flip the sign; treat
   // an implausible rate as "no gross-up" rather than returning nonsense.
@@ -76,12 +82,12 @@ function packagingGrossEquivalent(opts = {}) {
  */
 function effectivePackage(base, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
-  const b = num(base);
+  const b = toNumber(base);
   if (b === null || b <= 0) return null;
 
-  const superannuation = Math.round(b * (num(o.superRate) || 0));
+  const superannuation = Math.round(b * (toNumber(o.superRate) || 0));
   const leaveLoading = Math.round(
-    b * (num(o.leaveLoadingRate) || 0) * ((num(o.leaveLoadingWeeks) || 0) / 52),
+    b * (toNumber(o.leaveLoadingRate) || 0) * ((toNumber(o.leaveLoadingWeeks) || 0) / 52),
   );
   const packaging = o.packagingAvailable === false ? 0 : packagingGrossEquivalent(o);
 
@@ -106,7 +112,7 @@ function advertisedValue(job, opts = {}) {
   const j = job || {};
   // Prefer the top of an advertised range: it is what the employer says is
   // reachable, and the bottom is usually for a less experienced candidate.
-  const stated = num(j.salaryMax) !== null ? num(j.salaryMax) : num(j.salaryMin);
+  const stated = toNumber(j.salaryMax) !== null ? toNumber(j.salaryMax) : toNumber(j.salaryMin);
   if (stated === null || stated <= 0) {
     return { stated: null, total: null, imputed: [], unknown: true };
   }
@@ -116,8 +122,8 @@ function advertisedValue(job, opts = {}) {
   if (j.superIncluded === true) {
     superannuation = 0; // already inside the quoted figure
   } else {
-    superannuation = Math.round(stated * (num(o.superRate) || 0));
-    imputed.push(`super at ${Math.round((num(o.superRate) || 0) * 100)}% (the ad did not say)`);
+    superannuation = Math.round(stated * (toNumber(o.superRate) || 0));
+    imputed.push(`super at ${Math.round((toNumber(o.superRate) || 0) * 100)}% (the ad did not say)`);
   }
 
   // Private employers are not FBT-exempt, so no packaging is assumed. Saying

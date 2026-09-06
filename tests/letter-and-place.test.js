@@ -95,6 +95,24 @@ describe('salutation and the signoff that has to agree with it', () => {
     expect(l.signoff.split('\n')[0]).toBe('Yours faithfully,');
   });
 
+  test('"Dear Hiring Manager" takes "Yours faithfully", never sincerely', () => {
+    // It names a role, not a person. Sincerely belongs with a name, and a
+    // formal tone used to get "Yours sincerely" here — the exact convention
+    // error the salutation block was written to prevent, found by adding the
+    // option to the web app and reading the pair it produced.
+    const l = coverLetter(p, j, { salutation: 'hiring-manager', tone: 'formal' });
+    expect(l.greeting).toBe('Dear Hiring Manager,');
+    expect(l.signoff.split('\n')[0]).toBe('Yours faithfully,');
+  });
+
+  test('an unrecognised salutation token is used verbatim — the escape hatch', () => {
+    // Pinning this because it is a trap as much as a feature: a typo becomes
+    // the most visible line of the letter, silently. It is kept because a
+    // custom greeting is genuinely useful, so callers pass a full greeting or
+    // one of the known tokens, never a shorthand of their own invention.
+    expect(coverLetter(p, j, { salutation: 'Dear Team,' }).greeting).toBe('Dear Team,');
+  });
+
   test('a named recipient takes "Yours sincerely", and beats the option', () => {
     // Convention, and also the right outcome: a name always wins over an
     // unnamed salutation, so asking for Sir/Madam must not override one.

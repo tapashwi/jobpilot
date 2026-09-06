@@ -325,6 +325,12 @@
         <div><label for="jreq">Required skills (comma separated, optional)</label>
              <input type="text" id="jreq" placeholder="left blank = read from the ad" /></div>
       </div>
+      <div class="row">
+        <div><label for="jloc">Where the job is</label>
+             <input type="text" id="jloc" placeholder="Melbourne, VIC" /></div>
+        <div><label for="jhome">Where you live</label>
+             <input type="text" id="jhome" placeholder="Darwin" /></div>
+      </div>
       <div class="actions"><button id="go">Check this job</button><button class="ghost" id="clearJob">Clear</button></div>
     </div>
     <div id="matchOut"></div>
@@ -356,7 +362,16 @@
             <option value="warm">Warm</option>
             <option value="formal">Formal</option>
           </select></div>
+        <div><label for="lSalutation">Opening, when no manager is named</label>
+          <select id="lSalutation">
+            <option value="hi-sir-madam">Hi Sir/Madam — Kind regards</option>
+            <option value="sir-madam">Dear Sir/Madam — Yours faithfully</option>
+            <option value="hiring-manager">Dear Hiring Manager — Yours faithfully</option>
+          </select></div>
       </div>
+      <label for="lWhy" style="margin-top:.8rem">Why them (optional, and the paragraph that decides whether the letter gets read)</label>
+      <textarea id="lWhy" style="min-height:80px"
+        placeholder="Not a compliment — a fact you looked up. What they build, who relies on it, and what that makes hard."></textarea>
       <label for="lJob" style="margin-top:.8rem">The job advertisement</label>
       <textarea id="lJob" placeholder="Paste the ad — the required skills are read from it"></textarea>
       <div class="actions"><button id="runLetter">Draft the letter</button>

@@ -33,14 +33,66 @@ function strip(src) {
     .replace(/^module\.exports\b[\s\S]*?;\s*$/gm, '');
 }
 
+/**
+ * Every top-level `const`/`let`/`var`/`function`/`class` a module contributes
+ * to the shared scope.
+ *
+ * Deliberately anchored to column zero. A declaration indented by even one
+ * space is inside a function and cannot collide with anything, so matching it
+ * would report collisions that are not real — and a checker that cries wolf
+ * gets switched off.
+ */
+function topLevelNames(src) {
+  const names = [];
+  const re = /^(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm;
+  let m;
+  while ((m = re.exec(src)) !== null) names.push(m[1]);
+  return names;
+}
+
+/**
+ * Refuse to emit a bundle that cannot parse.
+ *
+ * The header above has warned about this since the first version, and a
+ * warning in a comment is not a check. `num` was declared at the top level of
+ * BOTH match.js and package-value.js, so adding the second to MODULES would
+ * have produced "Identifier 'num' has already been declared" — a syntax error,
+ * which means the whole app fails to load, every tab at once. The tests would
+ * have stayed green throughout, because they require the modules separately
+ * and never see the shared scope. Better to fail the build.
+ */
+function assertNoCollisions(sources) {
+  const seen = new Map();
+  const clashes = [];
+  for (const { module: mod, src } of sources) {
+    for (const name of topLevelNames(src)) {
+      if (seen.has(name) && seen.get(name) !== mod) {
+        clashes.push(`  ${name} — declared in both ${seen.get(name)} and ${mod}`);
+      } else {
+        seen.set(name, mod);
+      }
+    }
+  }
+  if (clashes.length) {
+    throw new Error(
+      `${clashes.length} name(s) declared at the top level of more than one module.\n` +
+      'Every module lands in one shared scope, so this would be a syntax error and the ' +
+      `app would not load at all:\n${clashes.join('\n')}\n` +
+      'Rename one of them — the newer module, by convention.',
+    );
+  }
+}
+
 const aliases = read('packages/matching/data/skill-aliases.json');
 
 // Dependency order, innermost first.
 const MODULES = [
   'packages/matching/src/skills.js',
   'packages/matching/src/match.js',
+  'packages/matching/src/package-value.js',
   'packages/documents/src/evidence.js',
   'packages/documents/src/cover-letter.js',
+  'packages/documents/src/tells.js',
   'packages/documents/src/selection-criteria.js',
   'packages/ats/src/ats-check.js',
   'packages/tracker/src/pipeline.js',
@@ -56,7 +108,10 @@ const MODULES = [
   'packages/discovery/src/campaign.js',
   'packages/discovery/src/jobpage.js'
 ];
-const body = MODULES.map((m) => `  // ---- ${m}\n${strip(read(m))}`).join('\n');
+
+const sources = MODULES.map((m) => ({ module: m, src: strip(read(m)) }));
+assertNoCollisions(sources);
+const body = sources.map(({ module: m, src }) => `  // ---- ${m}\n${src}`).join('\n');
 
 const out = `/**
  * GENERATED FILE — do not edit.
@@ -90,6 +145,14 @@ ${body}
     evidenceFor: evidenceFor,
     strongest: strongest,
     coverLetter: coverLetter,
+    tells: tells,
+    rhythm: rhythm,
+    // where the job is, and what the package is really worth
+    reachability: reachability,
+    requiresPresence: requiresPresence,
+    isFullyRemote: isFullyRemote,
+    effectivePackage: effectivePackage,
+    advertisedValue: advertisedValue,
     parseCriteria: parseCriteria,
     draftResponse: draftResponse,
     draftAll: draftAll,
@@ -156,7 +219,15 @@ ${body}
 // file should ever exist — it drifts the first time someone rebuilds one and
 // not the other, and the symptom is the extension behaving differently from
 // the web app for no visible reason.
-for (const dest of ['app/engine.js', 'extension/engine.js']) {
-  fs.writeFileSync(path.join(ROOT, dest), out);
+if (require.main === module) {
+  for (const dest of ['app/engine.js', 'extension/engine.js']) {
+    fs.writeFileSync(path.join(ROOT, dest), out);
+  }
+  console.log('engine.js built —', out.split('\n').length, 'lines (app + extension)');
 }
-console.log('engine.js built —', out.split('\n').length, 'lines (app + extension)');
+
+// Exported so the collision guard is itself tested. A safety net nobody
+// exercises is the one that has quietly stopped working by the time it is
+// needed — the same reason tests/unsourced-claims.test.js plants a fabrication
+// rather than only asserting the count is zero.
+module.exports = { topLevelNames, assertNoCollisions, MODULES };

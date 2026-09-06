@@ -234,8 +234,13 @@ describe('the cover letter', () => {
   test('tone changes the wording without changing the evidence', () => {
     const plain = coverLetter(profile, job, { tone: 'plain' });
     const formal = coverLetter(profile, job, { tone: 'formal' });
-    expect(formal.text).toMatch(/Yours sincerely/);
-    expect(plain.text).not.toMatch(/Yours sincerely/);
+    // `job` names no hiring manager, so the formal signoff is YOURS
+    // FAITHFULLY — sincerely belongs with a name. This line asserted
+    // "Yours sincerely" until 2026-09-06 and so held the convention error in
+    // place; the exact signoff was always incidental to what this test is
+    // about, which is the assertion below it.
+    expect(formal.text).toMatch(/Yours faithfully/);
+    expect(plain.text).not.toMatch(/Yours faithfully/);
     expect(formal.sources.map((s) => s.quotedFrom)).toEqual(plain.sources.map((s) => s.quotedFrom));
   });
 });
