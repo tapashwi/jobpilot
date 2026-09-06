@@ -38,6 +38,30 @@ const PROFILE_PATH = path.join(__dirname, '..', 'profile.local.json');
 const DRAFTS_DIR = path.join(__dirname, '..', 'drafts');
 
 /**
+ * Board slugs are not brand names.
+ *
+ * Greenhouse, Lever and Ashby key on a slug, and the adapter has nothing else
+ * to call the employer — so a letter opened "the Security Engineer role at
+ * mable", lower case, which reads as exactly what it is: a machine printing a
+ * database key. Only employers a draft has actually been written for need to
+ * be here; anything absent falls back to the slug, and the fix is to add it.
+ */
+const DISPLAY_NAMES = {
+  cultureamp: 'Culture Amp',
+  mable: 'Mable',
+  octopusdeploy: 'Octopus Deploy',
+  eucalyptus: 'Eucalyptus',
+  relevanceai: 'Relevance AI',
+  immutable: 'Immutable',
+  kasada: 'Kasada',
+  brighte: 'Brighte',
+  prospa: 'Prospa',
+  cloudflare: 'Cloudflare',
+  okta: 'Okta',
+  elastic: 'Elastic',
+};
+
+/**
  * Researched, per-employer material.
  *
  * Keyed by company slug. This is the paragraph that decides whether a letter
@@ -50,8 +74,6 @@ const DRAFTS_DIR = path.join(__dirname, '..', 'drafts');
  */
 const RESEARCH = {
   cultureamp: {
-    // The board gives a slug, not a brand. "cultureamp" in a salutation is a
-    // small thing that reads as automated, so the display name is stated.
     displayName: 'Culture Amp',
     whyThem:
       "The part that interests me is whose identity you are governing. Culture Amp holds " +
@@ -119,7 +141,9 @@ async function main() {
     // which produced a letter leading on a machine-learning side project for
     // an identity role. The ad text was there the whole time; nobody read it.
     const job = Object.assign({}, enrich(raw), {
-      company: research.displayName || raw.company,
+      company: research.displayName
+        || DISPLAY_NAMES[String(raw.company || '').toLowerCase()]
+        || raw.company,
     });
 
     const letter = coverLetter(profile, job, {
@@ -173,4 +197,4 @@ if (require.main === module) {
   main().catch((e) => { console.error('Failed:', e.message); process.exit(1); });
 }
 
-module.exports = { RESEARCH, slugify };
+module.exports = { RESEARCH, DISPLAY_NAMES, slugify };

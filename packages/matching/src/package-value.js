@@ -148,10 +148,10 @@ function advertisedValue(job, opts = {}) {
 const SECURITY_TERMS = [
   'security analyst', 'security engineer', 'security operations', 'soc analyst',
   'cyber security', 'cybersecurity', 'information security', 'infosec',
-  'incident response', 'threat', 'vulnerability', 'penetration test', 'pentest',
+  'incident response', 'threat', 'vulnerabilit', 'penetration test', 'pentest',
   'red team', 'blue team', 'purple team', 'siem', 'sentinel', 'defender',
-  'grc', 'governance risk', 'iso 27001', 'essential eight', 'ism ', 'ceh',
-  'identity and access', 'iam ', 'privileged access', 'pam ',
+  'grc', 'governance risk', 'iso 27001', 'essential eight', 'ism', 'ceh',
+  'identity and access', 'iam', 'privileged access', 'pam',
   'security consultant', 'security specialist', 'security architect',
   'malware', 'forensic', 'cryptograph',
   // Added after a live run dropped real roles: "Senior DevSecOps Engineer"
@@ -159,6 +159,42 @@ const SECURITY_TERMS = [
   'devsecops', 'appsec', 'application security', 'cloud security',
   'network security', 'zero trust', 'edr', 'xdr', 'soar', 'cissp', 'oscp',
 ];
+
+/**
+ * Terms that are word STEMS: matched with a leading boundary and no trailing
+ * one, so "vulnerabilities", "forensics", "pentesting" and "cryptographic" all
+ * count as the word they are built from.
+ *
+ * Everything else is matched as a whole word.
+ */
+const SECURITY_STEMS = new Set([
+  'threat', 'vulnerabilit', 'pentest', 'forensic', 'cryptograph', 'malware',
+]);
+
+/**
+ * Match a term on WORD BOUNDARIES, not as a bare substring.
+ *
+ * A plain `includes` returned a hotel Gardener and a Building Maintenance
+ * Technician as cybersecurity roles: "siem" is inside the Spanish "siempre",
+ * and "ism " is inside "mechanism ". The trailing spaces the list used to
+ * carry ('ism ', 'iam ', 'pam ') were an attempt to bound exactly this, and
+ * they cannot work — a trailing space does nothing about a match that begins
+ * mid-word. Three-letter acronyms are a substring of something in any long
+ * enough advertisement, so the boundary has to be on both ends.
+ */
+const SECURITY_TERM_RES = SECURITY_TERMS.map((term) => {
+  const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  return {
+    term,
+    re: new RegExp(`\\b${escaped}${SECURITY_STEMS.has(term) ? '' : '\\b'}`, 'i'),
+  };
+});
+
+/** Which security terms appear in a piece of text, as whole words. */
+function securityTermsIn(text) {
+  const t = String(text || '');
+  return SECURITY_TERM_RES.filter(({ re }) => re.test(t)).map(({ term }) => term);
+}
 
 const SECURITY_FALSE_FRIENDS = [
   'security guard', 'security officer', 'social security', 'security licence',
@@ -188,6 +224,17 @@ const NON_PRACTITIONER_TITLES = [
   // Architect", which is a real practitioner role and has no "solutions".
   'solutions architect', 'solution architect', 'presales', 'pre-sales',
   'solutions consultant', 'solutions engineer', 'sales engineer',
+  // Found in the third live run, after adding three SECURITY VENDORS'
+  // boards (Cloudflare, Okta, Elastic). Every posting a security vendor
+  // publishes mentions security repeatedly, so the two-signal body rule
+  // returned "Digital Communications Director", "Customer Experience Manager
+  // - Russian Speaking" and thirty more like them. The vendors stay, because
+  // the same boards produced a real Consulting Architect - Security role in
+  // Canberra; it is the titles that need excluding, not the employers.
+  'customer engineer', 'customer experience', 'customer engineering',
+  'professional services consultant', 'gtm', 'go-to-market',
+  'communications director', 'investor relations', 'digital communications',
+  'forward deployed engineer', 'field engineer',
 ];
 
 /**
@@ -224,6 +271,10 @@ const OTHER_DISCIPLINE_TITLES = [
   'data engineer', 'data scientist', 'machine learning', 'mobile developer',
   'product manager', 'project manager', 'scrum master', 'designer',
   'ux researcher', 'technical writer', 'accountant', 'controller',
+  // "Sr Software QA Engineer" at a medical-device company reached the match
+  // list on two body mentions of "threat" and "vulnerability" in a boilerplate
+  // compliance paragraph. Testing is its own discipline.
+  'qa engineer', 'quality assurance', 'test engineer', 'sdet',
 ];
 
 /** Repair UTF-8 that was decoded as Latin-1 somewhere upstream. */
@@ -264,7 +315,7 @@ function isSecurityRole(job) {
   // is a false friend (a guard), but "Information Security Officer" is a real
   // security role that contains it. So a strong term in the title wins FIRST,
   // and only a title with no strong term is tested against the false friends.
-  if (SECURITY_TERMS.some((t) => title.includes(t))) return true;
+  if (securityTermsIn(title).length) return true;
 
   // A false friend in the TITLE now settles it — a security guard vacancy is
   // not a cybersecurity job however often the body says "security".
@@ -282,7 +333,7 @@ function isSecurityRole(job) {
 
   // In the body, require two distinct terms. One mention of "threat" in a
   // generic IT support ad is not a security role.
-  const hits = SECURITY_TERMS.filter((t) => haystack.includes(t));
+  const hits = securityTermsIn(haystack);
   return hits.length >= 2;
 }
 
@@ -339,6 +390,69 @@ function isFullyRemote(job) {
 }
 
 /**
+ * Regions a "remote" posting can be fenced to.
+ *
+ * Most remote jobs are remote WITHIN a country. "Remote (US only)", "Remote -
+ * Canada" and "Remote, EMEA" are all remote and all unavailable to someone in
+ * Darwin, and every one of them was classified plainly 'remote' — reachable —
+ * until this existed. That was tolerable while the sources were employer
+ * boards; it stops being tolerable the moment a remote-jobs board is added,
+ * because then it is most of the list.
+ *
+ * Australia and the Asia-Pacific are kept OUT of this list on purpose: a
+ * posting fenced to somewhere the candidate already is is not fenced at all.
+ */
+const REMOTE_REGION_LOCKS = [
+  { re: /\b(us|usa|u\.s\.|united states|americas|north america)\b/i, where: 'the United States' },
+  { re: /\b(canada|canadian)\b/i, where: 'Canada' },
+  { re: /\b(emea|europe|european|eu)\b/i, where: 'Europe' },
+  { re: /\b(uk|united kingdom|britain|british)\b/i, where: 'the United Kingdom' },
+  { re: /\b(latam|latin america)\b/i, where: 'Latin America' },
+  { re: /\b(india|philippines|singapore)\b/i, where: 'that country' },
+];
+
+/**
+ * What counts as "open to me" in a LOCATION field: home, or explicitly
+ * unrestricted.
+ */
+const OPEN_LOCATION = /\b(australia|australian|aus|au|apac|asia[- ]pacific|anz|worldwide|global|anywhere)\b/i;
+
+/**
+ * The same, for AD PROSE — and deliberately narrower.
+ *
+ * "worldwide", "global" and "anywhere" are dropped here because in a job ad
+ * they are almost always describing the employer ("a global team of 400")
+ * rather than where you may work from. Treating those as evidence of an open
+ * role is what let "Remote — USA" at HackerOne and Appspace read as reachable
+ * from Darwin: the location field said USA, and a single marketing "global"
+ * four hundred characters in overrode it.
+ */
+const OPEN_IN_PROSE = /\b(australia|australian|apac|asia[- ]pacific|anz)\b/i;
+
+/**
+ * If a remote posting is fenced to a region, which one — or null if it is open.
+ *
+ * THE LOCATION FIELD WINS. Jobicy's `jobGeo` and Himalayas'
+ * `locationRestrictions` are structured statements of exactly this, written
+ * into the location by their adapters, so when the location names a region
+ * that settles it and the body is not consulted at all. Prose is the fallback
+ * for sources that only ever say "Remote", and it is read from the opening
+ * only — a full ad body mentions every country an employer has an office in.
+ */
+function remoteRegionLock(job) {
+  const j = job || {};
+  const loc = String(j.location || '');
+  if (OPEN_LOCATION.test(loc)) return null;
+  const inLocation = REMOTE_REGION_LOCKS.find(({ re }) => re.test(loc));
+  if (inLocation) return inLocation.where;
+
+  const head = String(j.adText || '').slice(0, 400);
+  if (OPEN_IN_PROSE.test(head)) return null;
+  const inProse = REMOTE_REGION_LOCKS.find(({ re }) => re.test(head));
+  return inProse ? inProse.where : null;
+}
+
+/**
  * Is the job in a country the candidate can work in?
  *
  * This is the coarse filter. It answers "is this the right country", and
@@ -386,6 +500,25 @@ function reachability(job, opts = {}) {
 
   if (!isReachable(j, opts)) {
     return { kind: 'out-of-country', ok: false, note: 'Outside the countries you can work in.' };
+  }
+  // The region lock is checked BEFORE the fully-remote test, and the order is
+  // load-bearing. A "Remote — USA" posting whose body also says "hybrid"
+  // fails isFullyRemote and used to fall through to 'relocation', reported as
+  // "not commutable from Darwin" — which reads as an interstate move and is
+  // wrong in a way that wastes an application. Anything remote-flagged and
+  // fenced abroad is out of reach whatever else the ad says about presence.
+  const isRemoteish = REMOTE_WORDS.some(
+    (w) => loc.includes(w) || String(j.workArrangement || '').toLowerCase().includes(w),
+  );
+  if (isRemoteish) {
+    const lock = remoteRegionLock(j);
+    if (lock) {
+      return {
+        kind: 'remote-elsewhere',
+        ok: false,
+        note: `Remote, but only within ${lock} — not open to someone working from Australia.`,
+      };
+    }
   }
   if (isFullyRemote(j)) {
     return { kind: 'remote', ok: true, note: 'Fully remote.' };
@@ -496,6 +629,8 @@ module.exports = {
   reachability,
   requiresPresence,
   isFullyRemote,
+  remoteRegionLock,
+  securityTermsIn,
   COMMUTE_ZONES,
   fixMojibake,
   campaignReason,

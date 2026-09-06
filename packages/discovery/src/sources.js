@@ -176,6 +176,95 @@ const ADAPTERS = {
     }))
   },
 
+  /**
+   * Ashby. Per-company, same as Greenhouse and Lever, and worth having
+   * because a good share of Australian startups moved onto it.
+   *
+   * `workplaceType` is the field that matters: it says Hybrid / Remote /
+   * Onsite outright, so the reachability gate does not have to infer presence
+   * from the ad's prose. It is folded into the location string, which is where
+   * that gate reads from.
+   */
+  ashby: {
+    label: 'Ashby',
+    keyless: true,
+    perCompany: true,
+    url: (company) => `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(company)}`,
+    parse: (body, company) => (body.jobs || []).filter((j) => j.isListed !== false).map((j) => normalised({
+      id: `ashby:${company}:${j.id}`,
+      title: j.title,
+      company,
+      location: [j.location, j.workplaceType && j.workplaceType !== 'Onsite' ? j.workplaceType : null]
+        .filter(Boolean).join(' — ') || null,
+      remote: j.isRemote === true,
+      url: j.jobUrl || j.applyUrl,
+      adText: stripHtml(j.descriptionHtml),
+      postedAt: j.publishedAt || null,
+      source: 'ashby'
+    }))
+  },
+
+  /**
+   * Jobicy — remote roles, keyless.
+   *
+   * `jobGeo` is a REGION LOCK, not a place of work: "USA" on a remote posting
+   * means remote within the USA. It is written into the location so
+   * reachability() sees it, because a US-only remote job is not open to
+   * someone working from Darwin and reads identically to one that is.
+   *
+   * Their terms ask for attribution wherever listings are shown; nothing here
+   * republishes them, and any UI built on this should credit Jobicy.
+   */
+  jobicy: {
+    label: 'Jobicy',
+    keyless: true,
+    url: (_c, q) => `https://jobicy.com/api/v2/remote-jobs?count=50${q ? `&tag=${encodeURIComponent(q)}` : ''}`,
+    parse: (body) => (body.jobs || []).map((j) => normalised({
+      id: `jobicy:${j.id}`,
+      title: j.jobTitle,
+      company: j.companyName,
+      location: j.jobGeo ? `Remote — ${j.jobGeo}` : 'Remote',
+      remote: true,
+      url: j.url,
+      adText: stripHtml(j.jobDescription || j.jobExcerpt),
+      salaryMin: j.annualSalaryMin || null,
+      salaryMax: j.annualSalaryMax || null,
+      postedAt: j.pubDate || null,
+      source: 'jobicy'
+    }))
+  },
+
+  /**
+   * Himalayas — remote roles, keyless, and the only source here that states
+   * its region restriction as STRUCTURED DATA rather than prose.
+   *
+   * `locationRestrictions: ["United States"]` is unambiguous where a location
+   * string reading "Remote" is not, so it is used directly instead of being
+   * inferred. An empty array means genuinely worldwide.
+   */
+  himalayas: {
+    label: 'Himalayas',
+    keyless: true,
+    url: () => 'https://himalayas.app/jobs/api?limit=100',
+    parse: (body) => (body.jobs || body.data || []).map((j) => {
+      const restrictions = Array.isArray(j.locationRestrictions) ? j.locationRestrictions : [];
+      return normalised({
+        id: `himalayas:${j.guid || j.slug || j.title}`,
+        title: j.title,
+        company: j.companyName,
+        location: restrictions.length ? `Remote — ${restrictions.join(', ')}` : 'Remote — Worldwide',
+        remote: true,
+        url: j.applicationLink || j.url || (j.companySlug ? `https://himalayas.app/companies/${j.companySlug}` : null),
+        adText: stripHtml(j.description || j.excerpt),
+        // Only annual figures are comparable with everything else here.
+        salaryMin: j.salaryPeriod === 'annual' ? (j.minSalary || null) : null,
+        salaryMax: j.salaryPeriod === 'annual' ? (j.maxSalary || null) : null,
+        postedAt: j.pubDate || null,
+        source: 'himalayas'
+      });
+    })
+  },
+
   /** Needs a free key from developer.adzuna.com. Covers Australia. */
   adzuna: {
     label: 'Adzuna',

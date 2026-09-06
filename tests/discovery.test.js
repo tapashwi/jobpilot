@@ -23,7 +23,8 @@ function fakeFetch(map) {
 describe('what each source needs before it can run', () => {
   test('the keyless ones are the ones with no credentials', () => {
     expect(src.keylessSources().sort()).toEqual(
-      ['arbeitnow', 'greenhouse', 'lever', 'remoteok', 'remotive'].sort()
+      ['arbeitnow', 'ashby', 'greenhouse', 'himalayas', 'jobicy', 'lever',
+        'remoteok', 'remotive'].sort()
     );
   });
 

@@ -143,6 +143,33 @@ describe('the letter does not write like a machine', () => {
     expect(quoted).toBeLessThanOrEqual(1);
   });
 
+  test('a line that is not an action is never quoted after "I"', () => {
+    // Real output: "On Cisco: I certifications held: CCNA (Cisco Certified
+    // Network Associate)." The letter writes "I " in front of the line, which
+    // assumes a verb phrase; a heading or a certification list is not one, and
+    // nothing downstream can rescue it.
+    const resumeText = [
+      '- Certifications held: CCNA (Cisco Certified Network Associate), AZ-900.',
+      '- Troubleshot Windows 10/11, TCP/IP, DNS and DHCP failures across client sites.',
+    ].join('\n');
+    const l = coverLetter({ name: 'A', resumeText }, { title: 'E', company: 'Acme' }, {});
+    expect(l.text).not.toMatch(/I certifications/i);
+    expect(l.text).toMatch(/I troubleshot/i);
+  });
+
+  test('the same filter applies when there is no matching required skill', () => {
+    // The fix did not take on the first attempt because it was applied only to
+    // the required-skill path. When nothing matches, EVERY sentence comes from
+    // the fallback — so that is the branch that most needs it.
+    const resumeText = '- Speech Emotion Recognition (Machine Learning · CNN · Python) — an 8-class classifier.';
+    const l = coverLetter(
+      { name: 'A', resumeText },
+      { title: 'E', company: 'Acme', requiredSkills: ['kubernetes'] },
+      {},
+    );
+    expect(l.text).not.toMatch(/I speech Emotion/i);
+  });
+
   test('a supplied why-them paragraph replaces the blank', () => {
     const l = coverLetter({ name: 'A' }, { title: 'E', company: 'Acme' }, { whyThem: 'A real specific fact.' });
     expect(l.text).toContain('A real specific fact.');

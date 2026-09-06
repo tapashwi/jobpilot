@@ -39,12 +39,28 @@ const PROFILE_PATH = path.join(__dirname, '..', 'profile.local.json');
  * slug 404s harmlessly and is reported, so the list is cheap to extend.
  */
 const COMPANY_SLUGS = {
-  // Verified live 2026-09-06 by fetching each board. The first list was
-  // guessed from brand names and six of nine 404'd — canva, atlassian,
-  // airwallex and safetyculture do not use these ATSes under those slugs.
-  // Guessing a slug is free but silently costs recall, so check before adding.
-  greenhouse: ['cultureamp', 'octopusdeploy', 'eucalyptus'],
-  lever: ['immutable', 'kasada'],
+  // EVERY SLUG HERE RETURNED LIVE JOBS when probed on 2026-09-06. The first
+  // list was guessed from brand names and six of nine 404'd — canva,
+  // atlassian, airwallex and safetyculture do not use these ATSes under those
+  // slugs. A wrong slug 404s harmlessly and is reported, so it costs nothing
+  // to check and silently costs recall not to.
+  //
+  // Probed and NOT added, because they returned nothing under any obvious
+  // slug: employmenthero, deputy, linktree, go1, zeller, hipages, tyro,
+  // dovetail, myob, xero, wisetechglobal, nearmap, megaport, datacom, iress,
+  // pexa — and all 30 SmartRecruiters candidates. SmartRecruiters keys its
+  // boards on an internal company id rather than the brand name, so those
+  // cannot be guessed at all; that ATS needs a real board URL to add.
+  greenhouse: [
+    'cultureamp', 'octopusdeploy', 'eucalyptus', 'prospa',
+    // Security vendors. Not Australian employers, but they hire into
+    // Australia and every posting they publish is a security posting — which
+    // is the discipline being searched for. The location gate decides which
+    // of them are actually reachable; that is its job, not this list's.
+    'cloudflare', 'okta', 'elastic',
+  ],
+  lever: ['immutable', 'kasada', 'brighte', 'mable'],
+  ashby: ['relevanceai'],
 };
 
 function loadProfile() {

@@ -47,6 +47,58 @@ function asClause(text) {
 }
 
 /**
+ * Verbs a resume bullet actually opens with.
+ *
+ * Not a dictionary — the ~60 words that carry Australian IT and engineering
+ * bullets, plus their tenses. A stem list rather than exact forms, so "manage"
+ * covers managed and managing.
+ */
+const ACTION_VERBS = [
+  'run', 'ran', 'manage', 'managed', 'led', 'lead', 'build', 'built', 'design',
+  'develop', 'deploy', 'deliver', 'support', 'supported', 'troubleshoot',
+  'troubleshot', 'configure', 'configured', 'migrate', 'migrated', 'implement',
+  'automate', 'automated', 'maintain', 'maintained', 'monitor', 'monitored',
+  'resolve', 'resolved', 'own', 'owned', 'write', 'wrote', 'create', 'created',
+  'set up', 'setup', 'administer', 'administered', 'provision', 'provisioned',
+  'reduce', 'reduced', 'improve', 'improved', 'cut', 'saved', 'save', 'handle',
+  'handled', 'coordinate', 'coordinated', 'train', 'trained', 'document',
+  'documented', 'test', 'tested', 'audit', 'audited', 'review', 'reviewed',
+  'analyse', 'analyze', 'analysed', 'analyzed', 'investigate', 'investigated',
+  'respond', 'responded', 'secure', 'secured', 'harden', 'hardened', 'patch',
+  'patched', 'upgrade', 'upgraded', 'install', 'installed', 'diagnose',
+  'diagnosed', 'escalate', 'escalated', 'onboard', 'onboarded', 'oversee',
+  'oversaw', 'streamline', 'streamlined', 'introduce', 'introduced',
+];
+
+const ACTION_RE = new RegExp(`^(${ACTION_VERBS.join('|')})(s|d|ed|ing)?\\b`, 'i');
+
+/**
+ * Does this line read as something the person DID?
+ *
+ * The letter writes "I " in front of the line, which silently assumes it is a
+ * verb phrase. It is not always: a real draft produced
+ *
+ *   "On Cisco: I certifications held: CCNA (Cisco Certified Network
+ *    Associate), AZ-900."
+ *   "On Machine Learning: I speech Emotion Recognition (Machine Learning ·
+ *    CNN · Python) — An 8-class emotion classifier."
+ *
+ * Both lines are true, relevant and completely ungrammatical in that frame,
+ * because they are a label and a project heading rather than achievements.
+ * Nothing downstream could rescue them, so they are not quoted at all — the
+ * same call already made for a bare list of tools. A certification belongs in
+ * the resume, not in a sentence beginning "I".
+ */
+function readsAsAction(text) {
+  const t = asClause(text);
+  if (!t) return false;
+  // "Label: value" is a heading, whatever it contains.
+  const head = t.split(':')[0];
+  if (t.includes(':') && head.split(/\s+/).length <= 4) return false;
+  return ACTION_RE.test(t);
+}
+
+/**
  * Build the letter.
  *
  * profile: { name, email, phone, resumeText, yearsExperience }
@@ -90,7 +142,11 @@ function coverLetter(profile, job, opts) {
   const label = (canonical) => display.get(canonical) || fromAd(canonical) || titleCase(canonical);
 
   const ev = evidenceFor(p.resumeText, required.concat(preferred));
-  const backed = ev.filter((e) => e.hasEvidence);
+  // A line that does not read as an action cannot be quoted after "I", and
+  // there is nothing downstream that can fix it — see readsAsAction(). Dropped
+  // here rather than at the sentence, so a skill whose best line is a heading
+  // falls through to its next-best line instead of producing a broken one.
+  const backed = ev.filter((e) => e.hasEvidence && readsAsAction(e.text));
   const unbacked = ev.filter((e) => !e.hasEvidence && required.indexOf(e.skill) !== -1);
 
   // Lead with quantified evidence for required skills; those are the sentences
@@ -100,9 +156,16 @@ function coverLetter(profile, job, opts) {
     .sort((a, b) => (b.quantified - a.quantified) || (b.score - a.score))
     .slice(0, maxEvidence);
 
-  const fallback = lead.length ? [] : strongest(p.resumeText, maxEvidence).map((s) => ({
-    skill: s.skills[0], text: s.text, quantified: s.quantified, hasEvidence: true, score: 0
-  }));
+  // The SAME action filter as `backed` above. Leaving it off here was the
+  // whole reason the fix did not take on the first attempt: when no required
+  // skill has evidence, every sentence in the letter comes from this branch,
+  // so it is exactly the path that most needs the check.
+  const fallback = lead.length ? [] : strongest(p.resumeText, maxEvidence * 3)
+    .filter((s) => readsAsAction(s.text))
+    .slice(0, maxEvidence)
+    .map((s) => ({
+      skill: s.skills[0], text: s.text, quantified: s.quantified, hasEvidence: true, score: 0
+    }));
   const body = lead.length ? lead : fallback;
 
   /**
