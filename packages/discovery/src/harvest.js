@@ -27,6 +27,30 @@
  */
 
 /**
+ * BOARDS ATTEMPTED AND DELIBERATELY NOT ADDED (2026-09-06)
+ *
+ * Gumtree, Jora, jobs.nt.gov.au and apsjobs.gov.au were all wanted — the last
+ * two especially, for an NT public-sector candidate. None was added, because
+ * none could be VERIFIED from a server:
+ *
+ *   gumtree.com.au   403 to a plain request
+ *   au.jora.com      403 to a plain request
+ *   jobs.nt.gov.au   200, but a JavaScript-rendered app — the server HTML
+ *                    contains no job links at all
+ *   apsjobs.gov.au   200, Salesforce Lightning, same story
+ *
+ * A guessed pattern would be worse than an absent one. `boardFor` returning
+ * null produces a refusal the user can act on; a regex that looks right and
+ * matches nothing produces an empty harvest, which is indistinguishable from
+ * a results page that genuinely has no jobs. Nobody would ever find out.
+ *
+ * TO ADD ONE: open a real results page on that board, copy the href of any
+ * job link, and derive `jobUrl` from it — one sample URL per board is the
+ * only thing missing, and the shape is a permalink that does not change. Then
+ * add a case to tests/harvest-dom.test.js so it stays added.
+ */
+
+/**
  * Per-board URL patterns and how to pull an id out.
  *
  * `card` is the ancestor most likely to hold the title, employer and
