@@ -790,5 +790,64 @@
     "solution architecture",
     "system design",
     "technical design"
+  ],
+  "okta": [
+    "okta workflows",
+    "okta identity governance",
+    "okta workforce identity",
+    "okta admin"
+  ],
+  "sailpoint": [
+    "identityiq",
+    "identitynow"
+  ],
+  "cyberark": [],
+  "ping identity": [
+    "pingfederate",
+    "pingone"
+  ],
+  "auth0": [],
+  "keycloak": [],
+  "jumpcloud": [],
+  "onelogin": [],
+  "scim": [
+    "system for cross-domain identity management",
+    "scim provisioning"
+  ],
+  "mfa": [
+    "multi factor authentication",
+    "multifactor authentication",
+    "2fa",
+    "two factor authentication"
+  ],
+  "pam": [
+    "privileged access management",
+    "privileged identity management",
+    "pim"
+  ],
+  "identity governance": [
+    "iga",
+    "access certification",
+    "access review",
+    "access reviews"
+  ],
+  "conditional access": [],
+  "jamf": [
+    "jamf pro"
+  ],
+  "joiner mover leaver": [
+    "jml",
+    "joiner/mover/leaver",
+    "user lifecycle",
+    "identity lifecycle",
+    "onboarding and offboarding",
+    "provisioning and deprovisioning",
+    "onboarding/offboarding",
+    "onboarding offboarding",
+    "user onboarding",
+    "user offboarding",
+    "onboarding and offboarding users",
+    "starters and leavers",
+    "deprovisioning"
   ]
 }

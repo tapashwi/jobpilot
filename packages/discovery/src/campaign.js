@@ -162,38 +162,56 @@ async function run(profile, config, options) {
  * their own address, and they press send — which is also what makes the reply
  * land in their inbox rather than nowhere.
  */
-function emailDraft(profile, job, coverLetterText) {
-  if (!job.applyEmail) return null;
+function emailDraft(profile, job, coverLetterText, opts) {
   const p = profile || {};
-  const subject = `Application — ${job.title || 'your advertised role'}` +
-    (p.name ? ` — ${p.name}` : '');
+  const o = opts || {};
+  const j = job || {};
 
+  // WHY THIS NO LONGER RETURNS NULL WITHOUT AN ADDRESS (2026-09-06)
+  //
+  // It used to require job.applyEmail and give up otherwise. Most postings
+  // are web forms with no address at all — the one live match is a Greenhouse
+  // form — so the common case produced nothing, and the letter is useful
+  // regardless: it goes in the form's cover-letter field, or to an address
+  // found later. The mailto is what depends on knowing where to send it, so
+  // only the mailto is conditional now.
+  const subject = `Application - ${j.title || 'your advertised role'}` +
+    (p.name ? ` - ${p.name}` : '');
+
+  const salutation = o.salutation || 'Hi Sir/Madam,';
   const body = [
-    'Hello,',
+    salutation,
     '',
-    `I am applying for the ${job.title || 'advertised role'}` +
-      (job.company ? ` at ${job.company}` : '') + '.',
+    `I would like to be considered for the ${j.title || 'advertised role'}` +
+      (j.company ? ` at ${j.company}` : '') + '.',
     '',
     coverLetterText || '[paste your cover letter here]',
     '',
-    'My resume is attached.',
+    'My resume is attached. I would be grateful if you would put it forward for consideration.',
     '',
-    'Regards,',
+    o.signoff || 'Kind regards,',
     p.name || '[your name]',
-    [p.email, p.phone].filter(Boolean).join('  •  ')
+    [p.email, p.phone].filter(Boolean).join('  -  ')
   ].join('\n');
 
   return {
-    to: job.applyEmail,
+    to: j.applyEmail || null,
     subject,
     body,
     // Opening the user's own mail client, so the message is genuinely from
-    // them and the attachment is added by them.
-    mailto: `mailto:${encodeURIComponent(job.applyEmail)}` +
-      `?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
-    reminder: 'Attach your resume before sending — a mailto link cannot carry an attachment, ' +
-      'and an application email without one is deleted unread.',
-    foundBecause: job.applyEmailContext
+    // them and the attachment is added by them. Null when there is nowhere to
+    // send it yet — the letter above is still the deliverable.
+    mailto: j.applyEmail
+      ? `mailto:${encodeURIComponent(j.applyEmail)}` +
+        `?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      : null,
+    deliverBy: j.applyEmail ? 'email' : 'the application form on the posting',
+    reminder: j.applyEmail
+      ? 'Attach your resume before sending - a mailto link cannot carry an attachment, ' +
+        'and an application email without one is deleted unread.'
+      : 'No application address on this posting. Paste the letter into the form, ' +
+        'and attach the resume there.',
+    foundBecause: j.applyEmailContext || null
   };
 }
 

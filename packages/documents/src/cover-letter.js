@@ -105,15 +105,38 @@ function coverLetter(profile, job, opts) {
   }));
   const body = lead.length ? lead : fallback;
 
+  /**
+   * The salutation, and the signoff that has to agree with it.
+   *
+   * Convention is not decoration here. "Yours faithfully" belongs with "Dear
+   * Sir/Madam" and "Yours sincerely" with a named person; getting that pair
+   * wrong is a small error an HR reader notices immediately. And "Hi"
+   * anything pairs with neither — it takes "Kind regards".
+   *
+   * Worth saying once, since the default was chosen deliberately against it:
+   * an unnamed salutation tells the reader nobody looked up who they are,
+   * which is the first signal of a mass send. A name beats all of these.
+   */
+  const salutation = o.salutation || 'auto';
   const greeting = j.hiringManager
     ? `Dear ${j.hiringManager},`
-    : tone === 'formal'
-      ? 'Dear Hiring Manager,'
-      : 'Hello,';
+    : salutation === 'hi-sir-madam'
+      ? 'Hi Sir/Madam,'
+      : salutation === 'sir-madam'
+        ? 'Dear Sir/Madam,'
+        : salutation === 'hiring-manager'
+          ? 'Dear Hiring Manager,'
+          : typeof salutation === 'string' && salutation !== 'auto'
+            ? salutation
+            : tone === 'formal'
+              ? 'Dear Hiring Manager,'
+              : 'Hello,';
 
   const years = Number(p.yearsExperience);
   const opener = (() => {
-    const stem = `I am writing to apply for the ${role} position at ${company}.`;
+    // NOT "I am writing to apply for" — the reader knows why you wrote, and
+    // packages/documents/src/tells.js flags it. Lead with the fact instead.
+    const stem = `I would like to be considered for the ${role} role at ${company}.`;
     if (Number.isFinite(years) && years > 0) {
       const covered = body.map((e) => e.skill).filter(Boolean);
       return covered.length
@@ -126,7 +149,22 @@ function coverLetter(profile, job, opts) {
   const paragraphs = [];
   const sources = [];
 
+  // ONE QUOTE, ONE PARAGRAPH (2026-09-06).
+  //
+  // evidenceFor() scores every statement against every skill, so one resume
+  // line legitimately wins for several of them. Emitted naively that produced
+  // two consecutive paragraphs quoting the SAME sentence verbatim — "On
+  // Active Directory: ..." and "On Entra: ..." word for word — which is the
+  // most obviously machine-written thing a letter can do.
+  //
+  // The first skill to claim a line keeps it; later ones fall through to
+  // their next-best evidence or drop out.
+  const quoted = new Set();
+
   for (const e of body) {
+    const key = String(e.text || '').trim().toLowerCase();
+    if (quoted.has(key)) continue;
+    quoted.add(key);
     const clause = asClause(e.text);
     paragraphs.push(
       e.quantified
@@ -145,12 +183,26 @@ function coverLetter(profile, job, opts) {
 
   // Naming a gap yourself is stronger than leaving it to be discovered, but
   // only when it is one gap. Several is a job you should probably skip.
+  const gapAnswers = o.gapAnswers || {};
+  const answerFor = (skill) => gapAnswers[skill] || gapAnswers[label(skill)] || null;
+
   if (unbacked.length === 1) {
+    const answered = answerFor(unbacked[0].skill);
     paragraphs.push(
-      `The advertisement asks for ${label(unbacked[0].skill)}, which my resume does not ` +
-        `cover. ${GAP('one sentence: the closest thing you have done, or how quickly you have ' +
-        'picked up something comparable')}`
+      answered
+        ? `The advertisement asks for ${label(unbacked[0].skill)}, which my resume does not ` +
+          `cover. ${String(answered).trim()}`
+        : `The advertisement asks for ${label(unbacked[0].skill)}, which my resume does not ` +
+          `cover. ${GAP('one sentence: the closest thing you have done, or how quickly you have ' +
+          'picked up something comparable')}`
     );
+  } else if (unbacked.length > 1 && unbacked.every((u) => answerFor(u.skill))) {
+    // Several gaps normally means skip the job. But when the caller has a real
+    // answer for each — usually "same work, different vendor" — naming them is
+    // stronger than hoping nobody checks.
+    for (const u of unbacked) {
+      paragraphs.push(`On ${label(u.skill)}: ${String(answerFor(u.skill)).trim()}`);
+    }
   } else if (unbacked.length > 1) {
     paragraphs.push(
       GAP(`${unbacked.length} required skills have no supporting achievement in your resume ` +
@@ -159,10 +211,16 @@ function coverLetter(profile, job, opts) {
     );
   }
 
-  const why = j.company
-    ? `${GAP(`why ${company} specifically — one concrete thing about them, not a compliment. ` +
-        'This is the paragraph recruiters use to tell a tailored letter from a template')}`
-    : GAP('why this employer specifically');
+  // The paragraph that decides whether the letter gets read. Supplying real
+  // researched text is the point of opts.whyThem; the GAP is what happens
+  // when nobody did the reading, and it stays visible rather than being
+  // filled with a compliment.
+  const why = o.whyThem
+    ? String(o.whyThem).trim()
+    : j.company
+      ? `${GAP(`why ${company} specifically — one concrete thing about them, not a compliment. ` +
+          'This is the paragraph recruiters use to tell a tailored letter from a template')}`
+      : GAP('why this employer specifically');
   paragraphs.push(why);
 
   const closer = tone === 'warm'
@@ -171,8 +229,15 @@ function coverLetter(profile, job, opts) {
       ? 'I would welcome the opportunity to discuss my application further. Thank you for your consideration.'
       : 'I would be glad to talk it through. Thank you for reading.';
 
+  const closingFor = (g) => {
+    if (/^Hi\b/i.test(g)) return 'Kind regards,';
+    if (/Sir\/Madam/i.test(g)) return 'Yours faithfully,';
+    if (j.hiringManager) return 'Yours sincerely,';
+    return tone === 'formal' ? 'Yours sincerely,' : 'Regards,';
+  };
+
   const signoff = [
-    tone === 'formal' ? 'Yours sincerely,' : 'Regards,',
+    closingFor(greeting),
     p.name || GAP('your name'),
     [p.email, p.phone].filter(Boolean).join('  •  ') || GAP('email and phone')
   ].join('\n');

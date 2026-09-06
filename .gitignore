@@ -4,3 +4,4 @@ node_modules/
 # portfolio; the salary is not, and must never be committed.
 profile.local.json
 coverage/
+drafts/

@@ -800,9 +800,67 @@
     "solution architecture",
     "system design",
     "technical design"
+  ],
+  "okta": [
+    "okta workflows",
+    "okta identity governance",
+    "okta workforce identity",
+    "okta admin"
+  ],
+  "sailpoint": [
+    "identityiq",
+    "identitynow"
+  ],
+  "cyberark": [],
+  "ping identity": [
+    "pingfederate",
+    "pingone"
+  ],
+  "auth0": [],
+  "keycloak": [],
+  "jumpcloud": [],
+  "onelogin": [],
+  "scim": [
+    "system for cross-domain identity management",
+    "scim provisioning"
+  ],
+  "mfa": [
+    "multi factor authentication",
+    "multifactor authentication",
+    "2fa",
+    "two factor authentication"
+  ],
+  "pam": [
+    "privileged access management",
+    "privileged identity management",
+    "pim"
+  ],
+  "identity governance": [
+    "iga",
+    "access certification",
+    "access review",
+    "access reviews"
+  ],
+  "conditional access": [],
+  "jamf": [
+    "jamf pro"
+  ],
+  "joiner mover leaver": [
+    "jml",
+    "joiner/mover/leaver",
+    "user lifecycle",
+    "identity lifecycle",
+    "onboarding and offboarding",
+    "provisioning and deprovisioning",
+    "onboarding/offboarding",
+    "onboarding offboarding",
+    "user onboarding",
+    "user offboarding",
+    "onboarding and offboarding users",
+    "starters and leavers",
+    "deprovisioning"
   ]
-}
-;
+};
 
   // ---- packages/matching/src/skills.js
 /**
@@ -1295,15 +1353,75 @@ const GAP = (what) => `[${what}]`;
 /** Split a resume into candidate evidence lines: bullets and sentences. */
 function statements(resumeText) {
   const out = [];
-  const lines = String(resumeText || '').split(/\r?\n/);
+
+  // HARD-WRAPPED PROSE IS ONE PARAGRAPH, NOT SIX STATEMENTS (2026-09-06).
+  //
+  // A resume written in markdown wraps its prose at 80-90 characters, and
+  // treating each physical line as a statement chops sentences mid-clause.
+  // That put "I focused on network administration, Active Directory and
+  // Intune device management,." into a cover letter — a continuation line
+  // quoted as though it were a whole achievement.
+  //
+  // Bullets stay one-per-line, because that is what a bullet is. Everything
+  // else is joined until a blank line or the next bullet.
+  const rawLines = String(resumeText || '').split(/\r?\n/);
+  const lines = [];
+  let buffer = '';
+  const flush = () => { if (buffer.trim()) lines.push(buffer.trim()); buffer = ''; };
+  for (const raw of rawLines) {
+    const t = raw.trim();
+    // A BULLET WRAPS TOO. The first version flushed a bullet immediately and
+    // left its continuation to be dropped for being under the length floor,
+    // so "...and manage access via" reached a letter without the "Active
+    // Directory" that finished the sentence — the single most relevant line
+    // in the resume, truncated one word from the end.
+    const isNewBlock = !t || /^[-•*●▪]\s/.test(t) || /^#{1,6}\s/.test(t) || /^\*\*[^*]+:\*\*/.test(t);
+    if (isNewBlock) {
+      flush();
+      if (t) buffer = t;   // start the new block; its wrapped lines join it
+      continue;
+    }
+    buffer = buffer ? `${buffer} ${t}` : t;
+  }
+  flush();
 
   for (const raw of lines) {
-    const line = raw.trim();
+    let line = raw.trim();
     if (!line) continue;
 
-    const isBullet = /^[-•*●▪]\s*/.test(line);
+    // MARKDOWN (2026-09-06). Resumes arrive as markdown often enough that
+    // ignoring it corrupts the output rather than merely missing something.
+    //
+    // The bullet test below matches "*", which is also markdown emphasis, so
+    // "**Identity & Cloud:** Microsoft Entra ID, Active Directory" was read as
+    // a bullet, had ONE asterisk stripped, and reached a cover letter as
+    // "I *Identity & Cloud:** Microsoft Entra ID". That shipped in a draft.
+    if (/^#{1,6}\s/.test(line)) continue;              // heading
+    const labelled = line.match(/^\*\*([^*]+):\*\*\s*(.+)$/);
+    if (labelled) line = `${labelled[1]}: ${labelled[2]}`;  // "Label: content"
+    line = line.replace(/\*\*/g, '').replace(/(^|\s)_(?=\S)/g, '$1');
+
+    const isBullet = /^[-•●▪]\s+/.test(line) || /^\*\s+/.test(line);
     const body = line.replace(/^[-•*●▪]\s*/, '').trim();
     if (body.length < 20) continue; // headings, dates, contact fragments
+
+    // A SKILLS LIST IS NOT EVIDENCE (2026-09-06).
+    //
+    // "Identity & Cloud: Microsoft Entra ID, Active Directory, Microsoft
+    // Intune, Microsoft 365" names technologies; it does not say what the
+    // person did with any of them. Quoted into a letter it became "On Active
+    // Directory: I identity & Cloud: Microsoft Entra ID..." — ungrammatical,
+    // and it displaced the one line that actually mattered, which was
+    // "Run user onboarding/offboarding ... manage access via Active Directory".
+    //
+    // Detected by shape rather than by a keyword list: a short label, a colon,
+    // then several comma-separated fragments none of which is a clause.
+    const listed = body.match(/^[A-Z][\w &/]{2,30}:\s*(.+)$/);
+    if (listed) {
+      const parts = listed[1].split(/[,·]/).map((x) => x.trim()).filter(Boolean);
+      const shortParts = parts.filter((x) => x.split(/\s+/).length <= 4).length;
+      if (parts.length >= 3 && shortParts / parts.length >= 0.7) continue;
+    }
 
     if (isBullet) {
       out.push({ text: body, kind: 'bullet' });
@@ -1505,15 +1623,38 @@ function coverLetter(profile, job, opts) {
   }));
   const body = lead.length ? lead : fallback;
 
+  /**
+   * The salutation, and the signoff that has to agree with it.
+   *
+   * Convention is not decoration here. "Yours faithfully" belongs with "Dear
+   * Sir/Madam" and "Yours sincerely" with a named person; getting that pair
+   * wrong is a small error an HR reader notices immediately. And "Hi"
+   * anything pairs with neither — it takes "Kind regards".
+   *
+   * Worth saying once, since the default was chosen deliberately against it:
+   * an unnamed salutation tells the reader nobody looked up who they are,
+   * which is the first signal of a mass send. A name beats all of these.
+   */
+  const salutation = o.salutation || 'auto';
   const greeting = j.hiringManager
     ? `Dear ${j.hiringManager},`
-    : tone === 'formal'
-      ? 'Dear Hiring Manager,'
-      : 'Hello,';
+    : salutation === 'hi-sir-madam'
+      ? 'Hi Sir/Madam,'
+      : salutation === 'sir-madam'
+        ? 'Dear Sir/Madam,'
+        : salutation === 'hiring-manager'
+          ? 'Dear Hiring Manager,'
+          : typeof salutation === 'string' && salutation !== 'auto'
+            ? salutation
+            : tone === 'formal'
+              ? 'Dear Hiring Manager,'
+              : 'Hello,';
 
   const years = Number(p.yearsExperience);
   const opener = (() => {
-    const stem = `I am writing to apply for the ${role} position at ${company}.`;
+    // NOT "I am writing to apply for" — the reader knows why you wrote, and
+    // packages/documents/src/tells.js flags it. Lead with the fact instead.
+    const stem = `I would like to be considered for the ${role} role at ${company}.`;
     if (Number.isFinite(years) && years > 0) {
       const covered = body.map((e) => e.skill).filter(Boolean);
       return covered.length
@@ -1526,7 +1667,22 @@ function coverLetter(profile, job, opts) {
   const paragraphs = [];
   const sources = [];
 
+  // ONE QUOTE, ONE PARAGRAPH (2026-09-06).
+  //
+  // evidenceFor() scores every statement against every skill, so one resume
+  // line legitimately wins for several of them. Emitted naively that produced
+  // two consecutive paragraphs quoting the SAME sentence verbatim — "On
+  // Active Directory: ..." and "On Entra: ..." word for word — which is the
+  // most obviously machine-written thing a letter can do.
+  //
+  // The first skill to claim a line keeps it; later ones fall through to
+  // their next-best evidence or drop out.
+  const quoted = new Set();
+
   for (const e of body) {
+    const key = String(e.text || '').trim().toLowerCase();
+    if (quoted.has(key)) continue;
+    quoted.add(key);
     const clause = asClause(e.text);
     paragraphs.push(
       e.quantified
@@ -1545,12 +1701,26 @@ function coverLetter(profile, job, opts) {
 
   // Naming a gap yourself is stronger than leaving it to be discovered, but
   // only when it is one gap. Several is a job you should probably skip.
+  const gapAnswers = o.gapAnswers || {};
+  const answerFor = (skill) => gapAnswers[skill] || gapAnswers[label(skill)] || null;
+
   if (unbacked.length === 1) {
+    const answered = answerFor(unbacked[0].skill);
     paragraphs.push(
-      `The advertisement asks for ${label(unbacked[0].skill)}, which my resume does not ` +
-        `cover. ${GAP('one sentence: the closest thing you have done, or how quickly you have ' +
-        'picked up something comparable')}`
+      answered
+        ? `The advertisement asks for ${label(unbacked[0].skill)}, which my resume does not ` +
+          `cover. ${String(answered).trim()}`
+        : `The advertisement asks for ${label(unbacked[0].skill)}, which my resume does not ` +
+          `cover. ${GAP('one sentence: the closest thing you have done, or how quickly you have ' +
+          'picked up something comparable')}`
     );
+  } else if (unbacked.length > 1 && unbacked.every((u) => answerFor(u.skill))) {
+    // Several gaps normally means skip the job. But when the caller has a real
+    // answer for each — usually "same work, different vendor" — naming them is
+    // stronger than hoping nobody checks.
+    for (const u of unbacked) {
+      paragraphs.push(`On ${label(u.skill)}: ${String(answerFor(u.skill)).trim()}`);
+    }
   } else if (unbacked.length > 1) {
     paragraphs.push(
       GAP(`${unbacked.length} required skills have no supporting achievement in your resume ` +
@@ -1559,10 +1729,16 @@ function coverLetter(profile, job, opts) {
     );
   }
 
-  const why = j.company
-    ? `${GAP(`why ${company} specifically — one concrete thing about them, not a compliment. ` +
-        'This is the paragraph recruiters use to tell a tailored letter from a template')}`
-    : GAP('why this employer specifically');
+  // The paragraph that decides whether the letter gets read. Supplying real
+  // researched text is the point of opts.whyThem; the GAP is what happens
+  // when nobody did the reading, and it stays visible rather than being
+  // filled with a compliment.
+  const why = o.whyThem
+    ? String(o.whyThem).trim()
+    : j.company
+      ? `${GAP(`why ${company} specifically — one concrete thing about them, not a compliment. ` +
+          'This is the paragraph recruiters use to tell a tailored letter from a template')}`
+      : GAP('why this employer specifically');
   paragraphs.push(why);
 
   const closer = tone === 'warm'
@@ -1571,8 +1747,15 @@ function coverLetter(profile, job, opts) {
       ? 'I would welcome the opportunity to discuss my application further. Thank you for your consideration.'
       : 'I would be glad to talk it through. Thank you for reading.';
 
+  const closingFor = (g) => {
+    if (/^Hi\b/i.test(g)) return 'Kind regards,';
+    if (/Sir\/Madam/i.test(g)) return 'Yours faithfully,';
+    if (j.hiringManager) return 'Yours sincerely,';
+    return tone === 'formal' ? 'Yours sincerely,' : 'Regards,';
+  };
+
   const signoff = [
-    tone === 'formal' ? 'Yours sincerely,' : 'Regards,',
+    closingFor(greeting),
     p.name || GAP('your name'),
     [p.email, p.phone].filter(Boolean).join('  •  ') || GAP('email and phone')
   ].join('\n');
@@ -4146,6 +4329,30 @@ async function search(sources, options) {
  */
 
 /**
+ * BOARDS ATTEMPTED AND DELIBERATELY NOT ADDED (2026-09-06)
+ *
+ * Gumtree, Jora, jobs.nt.gov.au and apsjobs.gov.au were all wanted — the last
+ * two especially, for an NT public-sector candidate. None was added, because
+ * none could be VERIFIED from a server:
+ *
+ *   gumtree.com.au   403 to a plain request
+ *   au.jora.com      403 to a plain request
+ *   jobs.nt.gov.au   200, but a JavaScript-rendered app — the server HTML
+ *                    contains no job links at all
+ *   apsjobs.gov.au   200, Salesforce Lightning, same story
+ *
+ * A guessed pattern would be worse than an absent one. `boardFor` returning
+ * null produces a refusal the user can act on; a regex that looks right and
+ * matches nothing produces an empty harvest, which is indistinguishable from
+ * a results page that genuinely has no jobs. Nobody would ever find out.
+ *
+ * TO ADD ONE: open a real results page on that board, copy the href of any
+ * job link, and derive `jobUrl` from it — one sample URL per board is the
+ * only thing missing, and the shape is a permalink that does not change. Then
+ * add a case to tests/harvest-dom.test.js so it stays added.
+ */
+
+/**
  * Per-board URL patterns and how to pull an id out.
  *
  * `card` is the ancestor most likely to hold the title, employer and
@@ -4526,38 +4733,56 @@ async function run(profile, config, options) {
  * their own address, and they press send — which is also what makes the reply
  * land in their inbox rather than nowhere.
  */
-function emailDraft(profile, job, coverLetterText) {
-  if (!job.applyEmail) return null;
+function emailDraft(profile, job, coverLetterText, opts) {
   const p = profile || {};
-  const subject = `Application — ${job.title || 'your advertised role'}` +
-    (p.name ? ` — ${p.name}` : '');
+  const o = opts || {};
+  const j = job || {};
 
+  // WHY THIS NO LONGER RETURNS NULL WITHOUT AN ADDRESS (2026-09-06)
+  //
+  // It used to require job.applyEmail and give up otherwise. Most postings
+  // are web forms with no address at all — the one live match is a Greenhouse
+  // form — so the common case produced nothing, and the letter is useful
+  // regardless: it goes in the form's cover-letter field, or to an address
+  // found later. The mailto is what depends on knowing where to send it, so
+  // only the mailto is conditional now.
+  const subject = `Application - ${j.title || 'your advertised role'}` +
+    (p.name ? ` - ${p.name}` : '');
+
+  const salutation = o.salutation || 'Hi Sir/Madam,';
   const body = [
-    'Hello,',
+    salutation,
     '',
-    `I am applying for the ${job.title || 'advertised role'}` +
-      (job.company ? ` at ${job.company}` : '') + '.',
+    `I would like to be considered for the ${j.title || 'advertised role'}` +
+      (j.company ? ` at ${j.company}` : '') + '.',
     '',
     coverLetterText || '[paste your cover letter here]',
     '',
-    'My resume is attached.',
+    'My resume is attached. I would be grateful if you would put it forward for consideration.',
     '',
-    'Regards,',
+    o.signoff || 'Kind regards,',
     p.name || '[your name]',
-    [p.email, p.phone].filter(Boolean).join('  •  ')
+    [p.email, p.phone].filter(Boolean).join('  -  ')
   ].join('\n');
 
   return {
-    to: job.applyEmail,
+    to: j.applyEmail || null,
     subject,
     body,
     // Opening the user's own mail client, so the message is genuinely from
-    // them and the attachment is added by them.
-    mailto: `mailto:${encodeURIComponent(job.applyEmail)}` +
-      `?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`,
-    reminder: 'Attach your resume before sending — a mailto link cannot carry an attachment, ' +
-      'and an application email without one is deleted unread.',
-    foundBecause: job.applyEmailContext
+    // them and the attachment is added by them. Null when there is nowhere to
+    // send it yet — the letter above is still the deliverable.
+    mailto: j.applyEmail
+      ? `mailto:${encodeURIComponent(j.applyEmail)}` +
+        `?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+      : null,
+    deliverBy: j.applyEmail ? 'email' : 'the application form on the posting',
+    reminder: j.applyEmail
+      ? 'Attach your resume before sending - a mailto link cannot carry an attachment, ' +
+        'and an application email without one is deleted unread.'
+      : 'No application address on this posting. Paste the letter into the form, ' +
+        'and attach the resume there.',
+    foundBecause: j.applyEmailContext || null
   };
 }
 

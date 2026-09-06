@@ -294,6 +294,51 @@ function isSecurityRole(job) {
  */
 const REMOTE_WORDS = ['remote', 'work from home', 'anywhere', 'distributed'];
 
+const AU_PLACES = [
+  'sydney', 'melbourne', 'brisbane', 'perth', 'adelaide', 'canberra', 'hobart',
+  'darwin', 'nsw', 'vic', 'qld', 'wa', 'sa', 'tas', 'act', 'nt',
+  'gold coast', 'newcastle', 'wollongong', 'geelong', 'cairns', 'townsville',
+  'alice springs', 'palmerston', 'katherine',
+];
+
+/** Cities the candidate can reach without moving house, keyed by home city. */
+const COMMUTE_ZONES = {
+  darwin: ['darwin', 'palmerston', 'nt', 'northern territory'],
+  sydney: ['sydney', 'nsw', 'new south wales', 'parramatta', 'newcastle', 'wollongong'],
+  melbourne: ['melbourne', 'vic', 'victoria', 'geelong'],
+  brisbane: ['brisbane', 'qld', 'queensland', 'gold coast', 'ipswich'],
+  perth: ['perth', 'wa', 'western australia', 'fremantle'],
+  adelaide: ['adelaide', 'sa', 'south australia'],
+  canberra: ['canberra', 'act'],
+  hobart: ['hobart', 'tas', 'tasmania'],
+};
+
+/** Does the posting say you have to be in the office, at least sometimes? */
+function requiresPresence(job) {
+  const j = job || {};
+  const text = `${j.location || ''} ${j.workArrangement || ''} ${j.adText || ''}`.toLowerCase();
+  if (/\bhybrid\b/.test(text)) return true;
+  if (/\b(on-?site|in[- ]office|in the office)\b/.test(text)) return true;
+  if (/\b\d\s*days?\s*(a|per)\s*week\b/.test(text)) return true;
+  return false;
+}
+
+function isFullyRemote(job) {
+  const j = job || {};
+  const loc = String(j.location || '').toLowerCase();
+  const arrangement = String(j.workArrangement || '').toLowerCase();
+  if (!REMOTE_WORDS.some((w) => loc.includes(w) || arrangement.includes(w))) return false;
+  // "Remote (hybrid, 2 days in Melbourne)" is not remote. Presence wins.
+  return !requiresPresence(j);
+}
+
+/**
+ * Is the job in a country the candidate can work in?
+ *
+ * This is the coarse filter. It answers "is this the right country", and
+ * deliberately NOT "can you get to the office" — see reachability() for that,
+ * and read the comment there before assuming this is enough.
+ */
 function isReachable(job, opts = {}) {
   const j = job || {};
   const countries = (opts.countries || ['australia', 'au', 'aus']).map((c) => c.toLowerCase());
@@ -304,13 +349,66 @@ function isReachable(job, opts = {}) {
   if (!loc.trim()) return true; // unstated: let the other gates decide
   if (countries.some((c) => loc.includes(c))) return true;
 
-  // Australian place names appear far more often than the country name.
-  const places = opts.places || [
-    'sydney', 'melbourne', 'brisbane', 'perth', 'adelaide', 'canberra', 'hobart',
-    'darwin', 'nsw', 'vic', 'qld', 'wa', 'sa', 'tas', 'act', 'nt',
-    'gold coast', 'newcastle', 'wollongong', 'geelong', 'cairns', 'townsville',
-  ];
+  const places = opts.places || AU_PLACES;
   return places.some((p) => new RegExp(`\\b${p}\\b`).test(loc));
+}
+
+/**
+ * Can the candidate actually take this job, and if not, what would it cost?
+ *
+ * WHY THIS IS SEPARATE FROM isReachable (2026-09-06)
+ *
+ * The first version had only the country check, and it passed a Melbourne
+ * role to someone in Darwin because Melbourne is in Australia. The role was
+ * hybrid, two days a week in the office. That is a relocation, not a commute,
+ * and 3,000 km is not a detail the reader should have to notice for
+ * themselves in the ad.
+ *
+ * It does NOT drop those jobs. An interstate role may be exactly what someone
+ * wants, and a tool that silently hides them is as unhelpful as one that
+ * silently pretends they are local. It labels them instead:
+ *
+ *   'local'      same commute zone, or no presence required
+ *   'remote'     fully remote and stays that way
+ *   'relocation' another city AND the posting requires presence
+ *   'unstated'   nothing said about location; nothing claimed either
+ */
+function reachability(job, opts = {}) {
+  const j = job || {};
+  const home = String(opts.homeCity || '').toLowerCase().trim();
+  const loc = String(j.location || '').toLowerCase();
+
+  if (!isReachable(j, opts)) {
+    return { kind: 'out-of-country', ok: false, note: 'Outside the countries you can work in.' };
+  }
+  if (isFullyRemote(j)) {
+    return { kind: 'remote', ok: true, note: 'Fully remote.' };
+  }
+  if (!loc.trim()) {
+    return { kind: 'unstated', ok: true, note: 'No location stated; check before applying.' };
+  }
+  if (!home) {
+    // Without a home city there is nothing to compare against, so claiming
+    // "local" would be an invention. Say what is known and no more.
+    return { kind: 'unstated', ok: true, note: 'No home city set, so distance was not checked.' };
+  }
+
+  const zone = COMMUTE_ZONES[home] || [home];
+  if (zone.some((z) => loc.includes(z))) {
+    return { kind: 'local', ok: true, note: 'Within your commute zone.' };
+  }
+  if (requiresPresence(j)) {
+    return {
+      kind: 'relocation',
+      ok: true,
+      note: `Requires being in the office, and it is in ${j.location} — not commutable from ${opts.homeCity}. This is a move, not a commute.`,
+    };
+  }
+  return {
+    kind: 'unstated',
+    ok: true,
+    note: `Listed in ${j.location}, but the posting does not say you must be on site. Worth asking.`,
+  };
 }
 
 /**
@@ -336,7 +434,13 @@ function campaignReason(profile, job, opts = {}) {
   // Geography before anything else. A perfect security role in Munich is not
   // a match for someone in Darwin, and surfacing it wastes the reader's time
   // more thoroughly than a missing job does.
-  if (!isReachable(job, opts)) return null;
+  //
+  // Interstate is different from foreign, though, and the difference is the
+  // user's to weigh: a Melbourne hybrid role is a real job that costs a house
+  // move. It is surfaced WITH that label rather than dropped or, worse,
+  // presented as if it were down the road.
+  const where = reachability(job, { ...opts, homeCity: opts.homeCity || p.homeCity });
+  if (!where.ok) return null;
 
   // How far below the current package a security role may sit and still be
   // worth surfacing. A career change is allowed to cost something; the
@@ -345,7 +449,7 @@ function campaignReason(profile, job, opts = {}) {
 
   if (security) {
     if (!current || ad.unknown) {
-      return { arm: 'security', reason: 'Security role', detail: 'Pay not stated; surfaced on discipline alone.' };
+      return { arm: 'security', reason: 'Security role', detail: 'Pay not stated; surfaced on discipline alone.', where };
     }
     const floor = current.total * (1 - tolerance);
     if (ad.total >= floor) {
@@ -355,6 +459,7 @@ function campaignReason(profile, job, opts = {}) {
         detail: `Worth about ${ad.total.toLocaleString()} against your ${current.total.toLocaleString()}.`,
         advertised: ad,
         current,
+        where,
       };
     }
     return null;
@@ -369,6 +474,7 @@ function campaignReason(profile, job, opts = {}) {
       detail: `About ${(ad.total - current.total).toLocaleString()} better on a like-for-like basis.`,
       advertised: ad,
       current,
+      where,
     };
   }
   return null;
@@ -381,6 +487,10 @@ module.exports = {
   advertisedValue,
   isSecurityRole,
   isReachable,
+  reachability,
+  requiresPresence,
+  isFullyRemote,
+  COMMUTE_ZONES,
   fixMojibake,
   campaignReason,
   SECURITY_TERMS,
