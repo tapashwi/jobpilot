@@ -18,6 +18,18 @@
  * see", never "few jobs exist". It prints the distinction rather than leaving
  * it to be inferred.
  *
+ * THE PAY ARM OF THE GATE IS ALMOST ALWAYS INERT. Measured 2026-09-06 across
+ * 1,394 collected jobs: **13 stated a salary at all — 0.9%**. Two of those
+ * were reachable, and none beat the current package.
+ *
+ * That is a fact about the market, not a bug: employers on these boards do not
+ * publish pay. It means the "or a better package" half of the campaign can
+ * only ever evaluate about one job in a hundred, and every match this script
+ * reports in practice comes through the security-discipline arm instead. Worth
+ * knowing before anyone tunes the salary thresholds expecting the list to
+ * move — correcting the current-package figure by $49k changed the match count
+ * by zero, for exactly this reason.
+ *
  * Usage:
  *   node scripts/find-jobs.js                 # keyless sources
  *   node scripts/find-jobs.js --query "security analyst"
